@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { createMessage, MessageType, MessagePriority } from './types';
 import { SessionRegistryManager } from './registry';
 import { GitManager } from '../utils/git';
+import { MessageBus } from './message-bus';
 import {
   OrchestrationError,
   ValidationError,
@@ -24,123 +25,23 @@ export interface CheckpointConfig {
   backupOnRemote: boolean;
 }
 
-export interface SystemSnapshot {
-  timestamp: Date;
-  sessions: SessionSnapshot[];
-  messages: MessageSnapshot[];
-  gitState: GitSnapshot;
-  systemState: SystemStateSnapshot;
-  context: ContextSnapshot;
-}
+// Interfaces moved to types.ts for better organization
 
-export interface SessionSnapshot {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  branch: string | null;
-  workspace: string;
-  metadata: Record<string, any>;
-  departments: DepartmentSnapshot[];
-  lastActivity: Date;
-  createdAt: Date;
-}
-
-export interface DepartmentSnapshot {
-  id: string;
-  name: string;
-  domain: string;
-  isActive: boolean;
-  currentTask: string | null;
-  completedTasks: string[];
-  pendingMessages: string[];
-  performance: PerformanceSnapshot;
-}
-
-export interface PerformanceSnapshot {
-  messagesProcessed: number;
-  averageResponseTime: number;
-  errorRate: number;
-  throughput: number;
-  lastActivity: Date;
-}
-
-export interface MessageSnapshot {
-  id: string;
-  type: string;
-  sender: string;
-  receiver: string | null;
-  content: any;
-  timestamp: Date;
-  priority: string;
-  retryCount: number;
-  status: 'pending' | 'delivered' | 'failed' | 'acknowledged';
-}
-
-export interface GitSnapshot {
-  currentBranch: string;
-  headCommit: string;
-  branches: string[];
-  tags: string[];
-  untrackedFiles: string[];
-  modifiedFiles: string[];
-  stagedFiles: string[];
-  remotes: RemoteSnapshot[];
-}
-
-export interface RemoteSnapshot {
-  name: string;
-  url: string;
-  connected: boolean;
-  lastSync: Date | null;
-}
-
-export interface SystemStateSnapshot {
-  memoryUsage: number;
-  cpuUsage: number;
-  diskUsage: number;
-  activeConnections: number;
-  uptime: number; // seconds
-  loadAverage: number[];
-  environment: string;
-  version: string;
-}
-
-export interface ContextSnapshot {
-  totalItems: number;
-  windows: number;
-  averageImportance: number;
-  itemsByType: Record<string, number>;
-  conflicts: number;
-  knowledgeGraph: {
-    nodes: number;
-    edges: number;
-    version: number;
-  };
-}
-
-export interface Checkpoint {
-  id: string;
-  name: string;
-  sessionId: string;
-  timestamp: Date;
-  snapshot: SystemSnapshot;
-  branches: string[];
-  metadata: {
-    feature?: string;
-    priority?: string;
-    author?: string;
-    description?: string;
-    tags: string[];
-  };
-  createdBy: string;
-  size: number;
-  checksum: string;
-  compressed: boolean;
-  encrypted: boolean;
-  retentionExpiresAt?: Date;
-  restoredFrom?: string; // ID of checkpoint this was restored from
-}
+// Import all required types
+import type {
+  Checkpoint,
+  SystemSnapshot,
+  SessionSnapshot,
+  MessageSnapshot,
+  DepartmentSnapshot,
+  PerformanceSnapshot,
+  GitSnapshot,
+  RemoteSnapshot,
+  SystemStateSnapshot,
+  ContextSnapshot,
+  Message,
+  MessageContent
+} from './types';
 
 export interface RestoreOptions {
   restoreType: 'full' | 'partial' | 'selective';
@@ -183,6 +84,7 @@ export class CheckpointManager extends EventEmitter {
   private config: CheckpointConfig;
   private registry: SessionRegistryManager;
   private gitManager: GitManager;
+  private messageBus: MessageBus;
   private checkpoints: Map<string, Checkpoint> = new Map();
   private checkpointHistory: string[] = [];
   private cleanupInterval?: NodeJS.Timeout;
@@ -190,12 +92,14 @@ export class CheckpointManager extends EventEmitter {
   constructor(
     config: CheckpointConfig,
     registry: SessionRegistryManager,
-    gitManager: GitManager
+    gitManager: GitManager,
+    messageBus?: MessageBus
   ) {
     super();
     this.config = config;
     this.registry = registry;
     this.gitManager = gitManager;
+    this.messageBus = messageBus || new MessageBus();
 
     // Start auto-checkpoint interval
     if (this.config.autoCheckpointInterval > 0) {
@@ -239,7 +143,7 @@ export class CheckpointManager extends EventEmitter {
     checkpointData: Omit<Checkpoint, 'id' | 'timestamp' | 'size' | 'checksum' | 'compressed' | 'encrypted'>,
     autoSave: boolean = false
   ): Promise<string> {
-    const checkpointId = checkpointData.id || `checkpoint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const checkpointId = `checkpoint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Create system snapshot
     const snapshot = await this.createSystemSnapshot();
@@ -277,7 +181,22 @@ export class CheckpointManager extends EventEmitter {
     await this.registry.createCheckpoint(checkpoint);
 
     // Create git tag
-    await this.gitManager.createCheckpointTag(checkpointId, checkpoint.name);
+    await this.gitManager.createCheckpointTag({
+      id: checkpointId,
+      name: checkpoint.name,
+      sessionId: checkpoint.sessionId,
+      timestamp: checkpoint.timestamp,
+      snapshot: checkpoint.snapshot,
+      branches: checkpoint.branches,
+      metadata: checkpoint.metadata,
+      createdBy: checkpoint.createdBy,
+      size: checkpoint.size,
+      checksum: checkpoint.checksum,
+      compressed: checkpoint.compressed,
+      encrypted: checkpoint.encrypted,
+      retentionExpiresAt: checkpoint.retentionExpiresAt,
+      restoredFrom: checkpoint.restoredFrom
+    }, checkpoint.branches[0] || 'main');
 
     // Emit event
     this.emit('checkpoint_created', checkpoint);
@@ -288,14 +207,18 @@ export class CheckpointManager extends EventEmitter {
       checkpoint.sessionId,
       {
         action: 'checkpoint_created',
-        checkpointId,
-        name: checkpoint.name,
-        size,
-        timestamp: checkpoint.timestamp
+        checkpoint: {
+          id: checkpointId,
+          name: checkpoint.name,
+          timestamp: checkpoint.timestamp,
+          snapshot: checkpoint.snapshot,
+          branches: checkpoint.branches,
+          metadata: checkpoint.metadata
+        }
       }
     );
 
-    await this.registry.publishMessageToSession(checkpoint.sessionId, notification);
+    await this.messageBus.publish(notification);
 
     return checkpointId;
   }
@@ -317,8 +240,14 @@ export class CheckpointManager extends EventEmitter {
         isActive: dept.isActive,
         currentTask: dept.currentTask,
         completedTasks: dept.completedTasks,
-        pendingMessages: dept.pendingMessages,
-        performance: dept.performance
+        pendingMessages: dept.pendingMessages.map(m => m.id),
+        performance: {
+        messagesProcessed: dept.performance.messagesProcessed,
+        averageResponseTime: dept.performance.averageResponseTime,
+        errorRate: dept.performance.errorRate,
+        throughput: dept.performance.throughput,
+        lastActivity: dept.performance.lastActivity
+      } as PerformanceSnapshot
       }));
 
       sessionSnapshots.push({
@@ -326,7 +255,7 @@ export class CheckpointManager extends EventEmitter {
         name: session.name,
         type: session.type,
         status: session.status,
-        branch: session.branch,
+        branch: session.branch || null,
         workspace: session.workspace,
         metadata: session.metadata,
         departments: departmentSnapshots,
@@ -339,7 +268,19 @@ export class CheckpointManager extends EventEmitter {
     const messages: MessageSnapshot[] = [];
 
     // Get git state
-    const gitState = await this.gitManager.getCurrentState();
+    const currentBranch = await this.gitManager.getCurrentBranch();
+    const currentCommit = await this.gitManager.getCurrentCommit();
+
+    const gitState: GitSnapshot = {
+      currentBranch,
+      headCommit: currentCommit,
+      branches: [],
+      tags: [],
+      untrackedFiles: [],
+      modifiedFiles: [],
+      stagedFiles: [],
+      remotes: []
+    };
 
     // Get system state (simplified)
     const systemState: SystemStateSnapshot = {
@@ -460,9 +401,9 @@ export class CheckpointManager extends EventEmitter {
           name: `pre-restore-backup-${checkpointId}`,
           sessionId: checkpoint.sessionId,
           branches: [],
+          snapshot: checkpoint.snapshot,
           metadata: {
-            tags: ['backup', 'pre-restore'],
-            originalCheckpoint: checkpointId
+            tags: ['backup', 'pre-restore', checkpointId]
           },
           createdBy: 'system'
         }, true);
@@ -513,7 +454,7 @@ export class CheckpointManager extends EventEmitter {
         }
       );
 
-      await this.registry.publishMessageToSession(checkpoint.sessionId, notification);
+      await this.messageBus.publish(notification);
 
     } catch (error) {
       result.errors.push(error instanceof Error ? error.message : 'Unknown error');
@@ -622,8 +563,14 @@ export class CheckpointManager extends EventEmitter {
               isActive: dept.isActive,
               currentTask: dept.currentTask,
               completedTasks: dept.completedTasks,
-              pendingMessages: dept.pendingMessages,
-              performance: dept.performance
+              pendingMessages: dept.pendingMessages.map(m => m.id),
+              performance: {
+        messagesProcessed: dept.performance.messagesProcessed,
+        averageResponseTime: dept.performance.averageResponseTime,
+        errorRate: dept.performance.errorRate,
+        throughput: dept.performance.throughput,
+        lastActivity: dept.performance.lastActivity
+      } as PerformanceSnapshot
             });
           }
 

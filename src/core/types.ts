@@ -180,37 +180,127 @@ export interface DepartmentPerformance {
 export interface Checkpoint {
   id: string;
   name: string;
-  timestamp: Date;
   sessionId: SessionId;
-  snapshot: CheckpointSnapshot;
+  timestamp: Date;
+  snapshot: SystemSnapshot;
   branches: string[];
-  metadata: Record<string, any>;
+  metadata: {
+    feature?: string;
+    priority?: string;
+    author?: string;
+    description?: string;
+    tags: string[];
+  };
   createdBy: SessionId;
+  size: number;
+  checksum: string;
+  compressed: boolean;
+  encrypted: boolean;
+  retentionExpiresAt?: Date;
+  restoredFrom?: string;
 }
 
-export interface CheckpointSnapshot {
-  messages: Message[];
-  sessions: Session[];
-  departmentStates: Record<string, any>;
-  gitState: GitState;
-  systemState: SystemState;
+export interface CheckpointSnapshot extends SystemSnapshot {}
+
+export interface SystemSnapshot {
+  timestamp: Date;
+  sessions: SessionSnapshot[];
+  messages: MessageSnapshot[];
+  gitState: GitSnapshot;
+  systemState: SystemStateSnapshot;
+  context: ContextSnapshot;
 }
 
-export interface GitState {
+export interface SessionSnapshot {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  branch: string | null;
+  workspace: string;
+  metadata: Record<string, any>;
+  departments: DepartmentSnapshot[];
+  lastActivity: Date;
+  createdAt: Date;
+}
+
+export interface DepartmentSnapshot {
+  id: string;
+  name: string;
+  domain: string;
+  isActive: boolean;
+  currentTask: string | null;
+  completedTasks: string[];
+  pendingMessages: string[];
+  performance: PerformanceSnapshot;
+}
+
+export interface PerformanceSnapshot {
+  messagesProcessed: number;
+  averageResponseTime: number;
+  errorRate: number;
+  throughput: number;
+  lastActivity: Date;
+}
+
+export interface MessageSnapshot {
+  id: string;
+  type: string;
+  sender: string;
+  receiver: string | null;
+  content: any;
+  timestamp: Date;
+}
+
+export interface GitSnapshot {
   currentBranch: string;
   headCommit: string;
+  branches: string[];
+  tags: string[];
   untrackedFiles: string[];
   modifiedFiles: string[];
   stagedFiles: string[];
+  remotes: RemoteSnapshot[];
 }
 
-export interface SystemState {
+export interface RemoteSnapshot {
+  name: string;
+  url: string;
+  connected: boolean;
+  lastSync: Date | null;
+}
+
+export interface SystemStateSnapshot {
   memoryUsage: number;
   cpuUsage: number;
   diskUsage: number;
   activeConnections: number;
   uptime: number;
+  loadAverage: number[];
+  environment: string;
+  version: string;
 }
+
+export interface ContextSnapshot {
+  totalItems: number;
+  windows: number;
+  averageImportance: number;
+  itemsByType: Record<string, number>;
+  conflicts: number;
+  knowledgeGraph: {
+    nodes: number;
+    edges: number;
+    version: number;
+  };
+}
+
+// Legacy interfaces - kept for backward compatibility
+export interface GitState extends Omit<GitSnapshot, 'branches' | 'tags' | 'remotes'> {}
+export interface SystemState extends Omit<SystemStateSnapshot, 'loadAverage' | 'environment' | 'version'> {}
+
+// Legacy interfaces - kept for backward compatibility
+export interface GitState extends Omit<GitSnapshot, 'branches' | 'tags' | 'remotes'> {}
+export interface SystemState extends Omit<SystemStateSnapshot, 'loadAverage' | 'environment' | 'version'> {}
 
 export interface SessionRegistry {
   sessions: Map<SessionId, Session>;
@@ -349,6 +439,21 @@ export class MessageTimeoutError extends OrchestrationError {
   }
 }
 
+export class CheckpointNotFoundError extends OrchestrationError {
+  constructor(checkpointId: string) {
+    super(`Checkpoint not found: ${checkpointId}`, 'CHECKPOINT_NOT_FOUND', 'high', false);
+  }
+}
+
+export class RestoreError extends OrchestrationError {
+  constructor(message: string, originalError?: Error) {
+    super(message, 'RESTORE_ERROR', 'critical', false);
+    if (originalError) {
+      this.stack = originalError.stack;
+    }
+  }
+}
+
 // Helper functions
 export const createMessage = (
   type: MessageType,
@@ -402,11 +507,14 @@ export const isValidMessage = (message: Message): boolean => {
 };
 
 export const filterMessages = (messages: Message[], filter: MessageFilter): Message[] => {
-  return messages.filter(message => {
-    if (filter.types && !filter.types.includes(message.type)) return false;
-    if (filter.priorities && !filter.priorities.includes(message.priority)) return false;
-    if (filter.senders && !filter.senders.includes(message.sender)) return false;
-    if (filter.receivers && message.receiver && !filter.receivers.includes(message.receiver)) return false;
+  // Create a copy of the array to prevent modification of the original
+  const result: Message[] = [];
+
+  for (const message of messages) {
+    if (filter.types && !filter.types.includes(message.type)) continue;
+    if (filter.priorities && !filter.priorities.includes(message.priority)) continue;
+    if (filter.senders && !filter.senders.includes(message.sender)) continue;
+    if (filter.receivers && message.receiver && !filter.receivers.includes(message.receiver)) continue;
     if (filter.tags && filter.tags.length > 0) {
       const hasTag = filter.tags.some(tag =>
         message.metadata.tags?.includes(tag) ||
@@ -414,8 +522,45 @@ export const filterMessages = (messages: Message[], filter: MessageFilter): Mess
           key.toLowerCase().includes(tag.toLowerCase())
         )
       );
-      if (!hasTag) return false;
+      if (!hasTag) continue;
     }
-    return true;
-  });
+    result.push(message);
+  }
+
+  return result;
+};
+
+/**
+ * Safely copies an array, removing any potentially dangerous properties
+ */
+export const safeArrayCopy = <T>(items: T[]): T[] => {
+  return items.map(item => JSON.parse(JSON.stringify(item)));
+};
+
+/**
+ * Validates and sanitizes array operations
+ */
+export const safeArrayOperation = <T>(
+  operation: (items: T[]) => T[],
+  items: T[],
+  maxLength: number = 10000
+): T[] => {
+  // Check for excessively large arrays
+  if (items.length > maxLength) {
+    throw new Error(`Array size ${items.length} exceeds maximum allowed size ${maxLength}`);
+  }
+
+  // Create a safe copy before operations
+  const safeCopy = safeArrayCopy(items);
+
+  try {
+    return operation(safeCopy);
+  } catch (error) {
+    throw new OrchestrationError(
+      `Array operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'ARRAY_OPERATION_ERROR',
+      'high',
+      false
+    );
+  }
 };

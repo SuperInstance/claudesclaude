@@ -5,6 +5,7 @@
 
 import { Logger } from 'winston';
 import { createLogger, format, transports } from 'winston';
+import z from 'zod';
 
 // Error severity levels
 export enum ErrorSeverity {
@@ -47,6 +48,7 @@ export class DirectorError extends Error {
   public readonly context: ErrorContext;
   public readonly retryable: boolean;
   public readonly recoverySuggestions: string[];
+  public readonly stackTrace?: string;
 
   constructor(
     message: string,
@@ -64,6 +66,8 @@ export class DirectorError extends Error {
     this.category = category;
     this.context = {
       timestamp: new Date(),
+      category,
+      severity,
       component: context.component || 'unknown',
       operation: context.operation || 'unknown',
       ...context
@@ -283,6 +287,26 @@ export class ErrorHandler {
       return error;
     }
 
+    if (error instanceof ValidationError) {
+      // Convert validation errors to appropriate DirectorError
+      const errorContext: Partial<ErrorContext> = {
+        ...context,
+        stackTrace: error.stack,
+        metadata: { ...(error as any).field, ...context?.metadata }
+      };
+      return new ValidationError(error.message, errorContext);
+    }
+
+    if (error instanceof z.ZodError) {
+      // Convert Zod validation errors
+      const errors = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+      const errorContext: Partial<ErrorContext> = {
+        ...context,
+        metadata: { validationErrors: error.issues, ...context?.metadata }
+      };
+      return new ValidationError(`Validation failed: ${errors}`, errorContext);
+    }
+
     if (error instanceof Error) {
       const errorContext: Partial<ErrorContext> = {
         ...context,
@@ -307,12 +331,6 @@ export class ErrorHandler {
           error.message.includes('quota') ||
           error.message.includes('limit')) {
         return new ResourceError(error.message, errorContext);
-      }
-
-      if (error.message.includes('validation') ||
-          error.message.includes('invalid') ||
-          error.message.includes('required')) {
-        return new ValidationError(error.message, errorContext);
       }
 
       // Default to system error

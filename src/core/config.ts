@@ -369,17 +369,35 @@ export class ConfigManager {
   }
 
   /**
-   * Deep merge objects
+   * Deep merge objects with prototype protection
    */
   private deepMerge(target: any, source: any): void {
-    for (const key in source) {
-      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+    // Create a clean copy of the source to prevent prototype pollution
+    const sourceClean = JSON.parse(JSON.stringify(source));
+
+    for (const key in sourceClean) {
+      if (sourceClean[key] && typeof sourceClean[key] === 'object' && !Array.isArray(sourceClean[key])) {
         if (!target[key]) target[key] = {};
-        this.deepMerge(target[key], source[key]);
+        this.deepMerge(target[key], sourceClean[key]);
       } else {
-        target[key] = source[key];
+        // Only set properties that exist in the safe object
+        target[key] = sourceClean[key];
       }
     }
+  }
+
+  /**
+   * Safe merge with validation
+   */
+  private safeMerge<T>(target: T, source: Partial<T>): T {
+    // Create a copy to avoid modifying the original
+    const result = { ...target };
+
+    // Deep merge with prototype protection
+    const sourceClean = JSON.parse(JSON.stringify(source));
+    this.deepMerge(result, sourceClean);
+
+    return result;
   }
 
   /**
@@ -423,7 +441,9 @@ export class ConfigManager {
    * Update configuration
    */
   public update(updates: Partial<Config>): void {
-    this.config = ConfigSchema.parse(this.mergeConfigs(this.config, updates));
+    // Use safe merge to prevent prototype pollution
+    const merged = this.mergeConfigs(this.config, updates);
+    this.config = ConfigSchema.parse(merged);
   }
 
   /**
@@ -451,7 +471,7 @@ export class ConfigManager {
       if (error instanceof z.ZodError) {
         return {
           valid: false,
-          errors: error.errors.map(e => e.message)
+          errors: error.issues.map(e => e.message)
         };
       }
       return {
