@@ -1,6 +1,6 @@
 // src/core/types.ts
 class ValidationError extends Error {
-  constructor(field, value, reason) {
+  constructor(field, _value, reason) {
     super(`Validation failed for ${field}: ${reason}`);
     this.name = "ValidationError";
   }
@@ -44,7 +44,8 @@ class NanoOrchestrator {
       validateWorkspace(config.workspace);
       validateSessionName(config.name);
     } catch (error) {
-      throw new Error(`Invalid session configuration: ${error.message}`);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Invalid session configuration: ${message}`);
     }
     const sessionId = this.nanoUUID();
     const now = Date.now();
@@ -3166,6 +3167,8 @@ class SimdSessionStorage {
     if (index === undefined)
       return false;
     const session = this.sessions[index];
+    if (!session)
+      return false;
     if (updates.type !== undefined && updates.type !== session.type) {
       this.removeFromIndex(session.type, index);
       this.updateIndex(updates.type, index);
@@ -3187,6 +3190,8 @@ class SimdSessionStorage {
     if (index === undefined)
       return false;
     const session = this.sessions[index];
+    if (!session)
+      return false;
     this.removeFromIndex(session.type, index);
     this.removeFromIndex(session.status, index);
     this.removeFromIndex(session.workspace, index);
@@ -3274,7 +3279,7 @@ class SimdSessionStorage {
     const result = [];
     for (let i = 0;i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -3286,8 +3291,13 @@ class SimdSessionStorage {
   evictLRU() {
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
-      this.delete(oldestId);
+      const firstEntry = entries[0];
+      if (firstEntry) {
+        const [oldestId] = firstEntry;
+        if (oldestId) {
+          this.delete(oldestId);
+        }
+      }
     }
   }
 }
@@ -3333,12 +3343,10 @@ class SimdOrchestrator {
     return;
   }
   deleteSession(id) {
+    const session = this.sessionStorage.get(id);
     const success = this.sessionStorage.delete(id);
-    if (success) {
-      const session = this.sessionStorage.get(id);
-      if (session) {
-        this.emit("session:deleted", session);
-      }
+    if (success && session) {
+      this.emit("session:deleted", session);
     }
     return success;
   }
@@ -3461,29 +3469,40 @@ function createSimdOrchestrator() {
 }
 var simdOrchestrator = createSimdOrchestrator();
 // src/core/wasm-orchestrator.ts
+var wasmCode = new Uint8Array([
+  0,
+  97,
+  115,
+  109,
+  1,
+  0,
+  0,
+  0
+]);
 var wasmModule = typeof WebAssembly !== "undefined" ? new WebAssembly.Module(wasmCode) : null;
+var wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 65536 });
 var wasmInstance = wasmModule ? new WebAssembly.Instance(wasmModule, {
   env: {
-    memory: new WebAssembly.Memory({ initial: 17, maximum: 65536 }),
+    memory: wasmMemory,
     table: new WebAssembly.Table({ initial: 1, element: "anyfunc" })
   }
 }) : null;
 var wasmExports = wasmInstance?.exports || {};
-var alloc = wasmExports.alloc;
 var free = wasmExports.free;
 var createSessionID = wasmExports.createSessionID;
 var hashString = wasmExports.hashString;
-var fastFilter = wasmExports.fastFilter;
 
 class WasmOrchestrator {
   sessions = new Map;
   contexts = new Map;
   messages = [];
   events = new Map;
-  wasmMemory = wasmInstance.exports.memory;
-  nextSessionId = 0;
+  wasmMemory;
   totalSessions = 0;
   totalMessages = 0;
+  constructor() {
+    this.wasmMemory = wasmMemory;
+  }
   createSession(config) {
     let sessionId;
     if (createSessionID && free) {
@@ -3586,8 +3605,9 @@ class WasmOrchestrator {
   filterWithWasm(array, predicate) {
     const result = [];
     for (let i = 0;i < array.length; i++) {
-      if (predicate(array[i])) {
-        result.push(array[i]);
+      const item = array[i];
+      if (item && predicate(item)) {
+        result.push(item);
       }
     }
     return result;
@@ -3677,16 +3697,6 @@ class WasmOrchestrator {
     }
   }
 }
-var wasmCode = new Uint8Array([
-  0,
-  97,
-  115,
-  109,
-  1,
-  0,
-  0,
-  0
-]);
 function createWasmOrchestrator() {
   return new WasmOrchestrator;
 }
@@ -3870,8 +3880,13 @@ class JitSessionStorage {
   evictLRU() {
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
-      this.delete(oldestId);
+      const firstEntry = entries[0];
+      if (firstEntry) {
+        const [oldestId] = firstEntry;
+        if (oldestId) {
+          this.delete(oldestId);
+        }
+      }
     }
   }
 }
@@ -4093,6 +4108,8 @@ class ZeroCopySessionStorage {
     if (index === undefined)
       return false;
     const session = this.sessions[index];
+    if (!session)
+      return false;
     if (updates.type !== undefined && updates.type !== session.type) {
       this.removeFromIndex(session.type, index);
       this.updateIndex(updates.type, index);
@@ -4119,6 +4136,8 @@ class ZeroCopySessionStorage {
     if (index === undefined)
       return false;
     const session = this.sessions[index];
+    if (!session)
+      return false;
     this.removeFromIndex(session.type, index);
     this.removeFromIndex(session.status, index);
     this.removeFromIndex(session.workspace, index);
@@ -4135,7 +4154,7 @@ class ZeroCopySessionStorage {
     const result = [];
     for (let i = 0;i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -4151,7 +4170,7 @@ class ZeroCopySessionStorage {
     const result = [];
     for (let i = 0;i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -4167,7 +4186,7 @@ class ZeroCopySessionStorage {
     const result = [];
     for (let i = 0;i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -4177,15 +4196,14 @@ class ZeroCopySessionStorage {
     return result;
   }
   getAll() {
-    const result = new Array(this.count);
-    let actualCount = 0;
+    const result = [];
     for (let i = 0;i < this.sessions.length; i++) {
       const session = this.sessions[i];
-      if (session !== null) {
-        result[actualCount++] = session;
+      if (session) {
+        result.push(session);
       }
     }
-    return result.slice(0, actualCount);
+    return result;
   }
   updateIndex(key, index) {
     if (!this.typeIndices.has(key)) {
@@ -4244,8 +4262,13 @@ class ZeroCopySessionStorage {
   evictLRU() {
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
-      this.delete(oldestId);
+      const firstEntry = entries[0];
+      if (firstEntry) {
+        const [oldestId] = firstEntry;
+        if (oldestId) {
+          this.delete(oldestId);
+        }
+      }
     }
   }
 }
@@ -4293,12 +4316,10 @@ class ZeroCopyOrchestrator {
     return;
   }
   deleteSession(id) {
+    const session = this.sessionStorage.get(id);
     const success = this.sessionStorage.delete(id);
-    if (success) {
-      const session = this.sessionStorage.get(id);
-      if (session) {
-        this.emit("session:deleted", session);
-      }
+    if (success && session) {
+      this.emit("session:deleted", session);
     }
     return success;
   }
@@ -4315,6 +4336,8 @@ class ZeroCopyOrchestrator {
     if (!this.sessionStorage.get(sessionId))
       return false;
     const messageWithTimestamp = {
+      id: message.id || Date.now().toString(36) + Math.random().toString(36).substr(2),
+      type: message.type || "message",
       content: message.content || "",
       role: message.role || "user",
       timestamp: new Date,
@@ -4481,8 +4504,6 @@ class TieredOrchestrator {
   analyzeWorkload() {
     const metrics = this.performanceMetrics;
     const now2 = Date.now();
-    const timeSinceLastCheck = now2 - this.lastPerformanceCheck;
-    const opsPerSecond = this.operationCount / (timeSinceLastCheck / 1000);
     const isHighVolume = metrics.messageCount > 1000 || metrics.sessionCount > 500;
     const isMemoryConstrained = metrics.memoryEfficiency < 0.7;
     const isLowLatency = metrics.latency < 10;
@@ -4529,14 +4550,14 @@ class TieredOrchestrator {
     } else if (operationType === "message") {
       this.performanceMetrics.messageCount++;
     }
-    const now2 = Date.now();
-    const timeSinceStart = (now2 - this.lastPerformanceCheck) / 1000;
+    const _now = Date.now();
+    const timeSinceStart = (_now - this.lastPerformanceCheck) / 1000;
     if (timeSinceStart > 0) {
       this.performanceMetrics.throughput = this.operationCount / timeSinceStart;
     }
-    const totalMemory = this.performanceMetrics.sessionCount * 1000 + this.performanceMetrics.messageCount * 500;
+    const _totalMemory = this.performanceMetrics.sessionCount * 1000 + this.performanceMetrics.messageCount * 500;
     const estimatedAvailable = 100 * 1024 * 1024;
-    this.performanceMetrics.memoryEfficiency = Math.min(1, totalMemory / estimatedAvailable);
+    this.performanceMetrics.memoryEfficiency = Math.min(1, _totalMemory / estimatedAvailable);
   }
   createSession(config) {
     const startTime = Date.now();
@@ -5054,6 +5075,340 @@ function createBenchmarkOrchestrator(config) {
   return new BenchmarkOrchestrator(config);
 }
 var benchmarkOrchestrator = createBenchmarkOrchestrator();
+// src/core/bit-orchestrator.ts
+var BITS = {
+  TYPE_SHIFT: 0,
+  TYPE_MASK: 7,
+  STATUS_SHIFT: 3,
+  STATUS_MASK: 3,
+  WORKSPACE_SHIFT: 5,
+  WORKSPACE_MASK: 63,
+  TIMESTAMP_SHIFT: 11
+};
+var TYPE_TO_BITS = new Map([
+  ["agent".length, 0],
+  ["task".length, 1],
+  ["workflow".length, 2],
+  ["session".length, 3],
+  ["ai-assistant".length, 4],
+  ["development".length, 5],
+  ["testing".length, 6],
+  ["deployment".length, 7]
+]);
+var STATUS_TO_BITS = new Map([
+  ["active".length, 0],
+  ["paused".length, 1],
+  ["completed".length, 2],
+  ["failed".length, 3]
+]);
+var WORKSPACE_ENCODE = new Map([
+  ["default", 0],
+  ["dev", 1],
+  ["prod", 2],
+  ["test", 3],
+  ["staging", 4],
+  ["team/backend", 5],
+  ["team/frontend", 6],
+  ["team/ai", 7]
+]);
+
+class BitSessionStorage {
+  buffer = new Uint32Array(65536);
+  freeList = new Uint16Array(16384);
+  freeHead = 0;
+  count = 0;
+  stringPool = new Map;
+  internedStrings = new Set;
+  create(session) {
+    const index = this.allocateSlot();
+    const typeBits = TYPE_TO_BITS.get(session.type.length) ?? 0;
+    const statusBits = STATUS_TO_BITS.get(session.status.length) ?? 0;
+    const workspaceBits = WORKSPACE_ENCODE.get(session.workspace) ?? 0;
+    const encoded = typeBits << BITS.TYPE_SHIFT | statusBits << BITS.STATUS_SHIFT | workspaceBits << BITS.WORKSPACE_SHIFT;
+    const base = index * 6;
+    this.buffer[base + 0] = this.encodeId(session.id);
+    this.buffer[base + 1] = encoded;
+    this.buffer[base + 2] = Math.imul(session.createdAt.getTime(), 1367130547);
+    this.buffer[base + 3] = session.updatedAt.getTime() >>> 0;
+    this.buffer[base + 4] = session.updatedAt.getTime() / 4294967296 | 0;
+    const nameKey = this.internString(session.name);
+    this.buffer[base + 5] = this.encodeStringPtr(nameKey);
+    this.count++;
+    return index;
+  }
+  get(index) {
+    if (index < 0 || index >= this.buffer.length / 6)
+      return;
+    const base = index * 6;
+    const idHash = this.buffer[base + 0] ?? 0;
+    const encoded = this.buffer[base + 1] ?? 0;
+    const tsHash = this.buffer[base + 2] ?? 0;
+    const tsLow = this.buffer[base + 3] ?? 0;
+    const tsHigh = this.buffer[base + 4] ?? 0;
+    const namePtr = this.buffer[base + 5] ?? 0;
+    if (encoded === 0 && idHash === 0)
+      return;
+    const typeBits = encoded >>> BITS.TYPE_SHIFT & BITS.TYPE_MASK;
+    const statusBits = encoded >>> BITS.STATUS_SHIFT & BITS.STATUS_MASK;
+    const workspaceBits = encoded >>> BITS.WORKSPACE_SHIFT & BITS.WORKSPACE_MASK;
+    const type = this.decodeType(typeBits);
+    const status = this.decodeStatus(statusBits);
+    const workspace = this.decodeWorkspace(workspaceBits);
+    if (!type || !status)
+      return;
+    return {
+      id: this.decodeId(idHash),
+      type,
+      name: this.decodeStringPtr(namePtr),
+      workspace,
+      config: {},
+      status,
+      createdAt: new Date(Math.imul(tsHash, 2246822507)),
+      updatedAt: new Date(tsHigh * 4294967296 | tsLow)
+    };
+  }
+  allocateSlot() {
+    if (this.freeHead > 0) {
+      const slot = this.freeList[--this.freeHead];
+      return slot ?? this.count;
+    }
+    if (this.count >= this.buffer.length / 6) {
+      const newBuffer = new Uint32Array(this.buffer.length * 2);
+      newBuffer.set(this.buffer);
+      this.buffer = newBuffer;
+    }
+    return this.count;
+  }
+  delete(index) {
+    if (index < 0 || index >= this.buffer.length / 6)
+      return;
+    const base = index * 6;
+    this.buffer[base] = 0;
+    if (this.freeHead < this.freeList.length) {
+      this.freeList[this.freeHead++] = index;
+    }
+    this.count--;
+  }
+  internString(str) {
+    if (this.internedStrings.has(str)) {
+      return str;
+    }
+    const hash = this.hashString(str);
+    const existing = this.stringPool.get(hash.toString());
+    if (existing) {
+      return existing;
+    }
+    this.stringPool.set(hash.toString(), str);
+    this.internedStrings.add(str);
+    return str;
+  }
+  hashString(str) {
+    let hash = 2166136261;
+    for (let i = 0;i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+  encodeId(id) {
+    return this.hashString(id) & 2147483647;
+  }
+  decodeId(hash) {
+    return `session-${hash.toString(36).padStart(8, "0")}`;
+  }
+  encodeStringPtr(str) {
+    return this.hashString(str) & 65535;
+  }
+  decodeStringPtr(ptr) {
+    return `session-${ptr.toString(36).padStart(4, "0")}`;
+  }
+  decodeType(bits) {
+    const types = ["agent", "task", "workflow", "session", "ai-assistant", "development", "testing", "deployment"];
+    return types[bits] ?? undefined;
+  }
+  decodeStatus(bits) {
+    const statuses = ["active", "paused", "completed", "failed"];
+    return statuses[bits];
+  }
+  decodeWorkspace(bits) {
+    const workspaces = Array.from(WORKSPACE_ENCODE.entries());
+    const entry = workspaces.find(([_, v]) => v === bits);
+    return entry?.[0] ?? "default";
+  }
+  getAll() {
+    const result = [];
+    for (let i = 0;i < this.count; i++) {
+      const session = this.get(i);
+      if (session) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+  clear() {
+    this.buffer.fill(0);
+    this.freeHead = 0;
+    this.count = 0;
+  }
+  getMemoryUsage() {
+    return this.buffer.byteLength + this.freeList.byteLength;
+  }
+}
+
+class BitOrchestrator {
+  storage = new BitSessionStorage;
+  contexts = new Map;
+  messages = [];
+  events = new Map;
+  createSession(config) {
+    const session = {
+      id: `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config ?? {},
+      status: "active",
+      createdAt: new Date,
+      updatedAt: new Date
+    };
+    this.storage.create(session);
+    this.emit("session", session);
+    return session;
+  }
+  getSessionByIndex(index) {
+    return this.storage.get(index);
+  }
+  getSession(id) {
+    const all = this.storage.getAll();
+    return all.find((s) => s.id === id);
+  }
+  sendMessage(sessionId, message) {
+    if (!this.getSession(sessionId))
+      return false;
+    this.messages.push({
+      id: message.id ?? `msg-${this.messages.length}`,
+      type: message.type ?? "user",
+      content: message.content,
+      role: message.role,
+      timestamp: message.timestamp ?? new Date,
+      metadata: message.metadata
+    });
+    this.emit("message", this.messages[this.messages.length - 1]);
+    return true;
+  }
+  getAllSessions() {
+    return this.storage.getAll();
+  }
+  getSessionsByType(type) {
+    const all = this.storage.getAll();
+    const result = [];
+    for (let i = 0;i < all.length; i++) {
+      const session = all[i];
+      if (session?.type === type) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+  getSessionsByStatus(status) {
+    const all = this.storage.getAll();
+    const result = [];
+    for (let i = 0;i < all.length; i++) {
+      const session = all[i];
+      if (session?.status === status) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+  getWorkspaceSessions(workspace) {
+    const all = this.storage.getAll();
+    const result = [];
+    for (let i = 0;i < all.length; i++) {
+      const session = all[i];
+      if (session?.workspace === workspace) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+  setContext(_index, _context) {}
+  getContext(_index) {
+    return;
+  }
+  updateSession(_id, _updates) {
+    return;
+  }
+  deleteSession(_id) {
+    return false;
+  }
+  processMessages() {
+    const count = this.messages.length;
+    this.messages = [];
+    return count;
+  }
+  getMetrics() {
+    const sessions = this.storage.getAll();
+    return {
+      totalSessions: sessions.length,
+      totalMessages: this.messages.length,
+      activeSessions: sessions.filter((s) => s.status === "active").length,
+      cachedContexts: this.contexts.size,
+      pendingMessages: this.messages.length,
+      memoryUsage: this.storage.getMemoryUsage(),
+      bitOptimized: true,
+      storageEfficiency: `${(32 / 1024).toFixed(2)} bytes per session`
+    };
+  }
+  getSessionCount() {
+    return this.storage.getAll().length;
+  }
+  clearAll() {
+    this.storage.clear();
+    this.contexts.clear();
+    this.messages = [];
+    this.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    if (metrics.activeSessions > 1e4) {
+      return { status: "degraded", details: metrics };
+    }
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    return this.storage.getAll();
+  }
+  importSessions(sessions) {
+    for (let i = 0;i < sessions.length; i++) {
+      this.createSession(sessions[i]);
+    }
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(_callback) {}
+  onSessionDeleted(_callback) {}
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+}
+function createBitOrchestrator() {
+  return new BitOrchestrator;
+}
+var bitOrchestrator = createBitOrchestrator();
 // src/utils/simple-lru-cache.ts
 class SimpleLRUCache {
   cache = new Map;
@@ -5291,13 +5646,67 @@ function createStreamlinedOrchestrator() {
   return new StreamlinedOrchestrator;
 }
 var orchestrator = createStreamlinedOrchestrator();
+// src/core/base-orchestrator.ts
+class AbstractOrchestrator {
+  events = new Map;
+  validateSessionConfig(config) {
+    if (!config.name || config.name.trim().length === 0) {
+      throw new Error("Session name cannot be empty");
+    }
+    if (config.name.length > 255) {
+      throw new Error("Session name must be 255 characters or less");
+    }
+    if (!config.workspace || config.workspace.trim().length === 0) {
+      throw new Error("Workspace cannot be empty");
+    }
+    if (config.workspace.includes("..") || config.workspace.includes("~")) {
+      throw new Error("Workspace cannot contain path traversal characters");
+    }
+    if (config.workspace.startsWith("/")) {
+      throw new Error("Workspace must be a relative path");
+    }
+    if (!/^[\w\-\/]+$/.test(config.workspace)) {
+      throw new Error("Workspace contains invalid characters");
+    }
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+}
 // src/utils/simple-utils.ts
 class SimpleUUID2 {
   generateFast() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
   }
   generateSecure() {
-    return crypto.randomUUID();
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : r & 3 | 8).toString(16);
+    });
   }
   generate(secure = false) {
     return secure ? this.generateSecure() : this.generateFast();
@@ -5310,9 +5719,10 @@ class SimpleTimestamp {
   }
   format(timestamp, options = {}) {
     const date = new Date(timestamp);
-    let result = date.toISOString().split("T")[0];
-    const timePart = date.toTimeString().split(" ")[0];
-    result += " " + timePart;
+    const isoParts = date.toISOString().split("T");
+    const datePart = isoParts[0] ?? "";
+    const timePart = date.toTimeString().split(" ")[0] ?? "";
+    let result = datePart + " " + timePart;
     if (options.includeMilliseconds) {
       result += "." + date.getMilliseconds().toString().padStart(3, "0");
     }
@@ -5389,8 +5799,10 @@ export {
   createJitOrchestrator,
   createHyperOptimizedOrchestrator,
   createHotPathOrchestrator,
+  createBitOrchestrator,
   createBenchmarkOrchestrator,
   createAdaptiveOrchestrator,
+  bitOrchestrator,
   benchmarkOrchestrator,
   adaptiveOrchestrator,
   ZeroCopyOrchestrator,
@@ -5413,6 +5825,8 @@ export {
   JitOrchestrator,
   HyperOptimizedOrchestrator as HyperOrchestrator,
   HotPathOrchestrator,
+  BitOrchestrator,
   BenchmarkOrchestrator,
-  AdaptiveOrchestrator
+  AdaptiveOrchestrator,
+  AbstractOrchestrator
 };
