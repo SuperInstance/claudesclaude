@@ -63,6 +63,9 @@ export { BitOrchestrator as BitOrchestrator, createBitOrchestrator, bitOrchestra
 // Binary Protocol Orchestrator - Efficient binary serialization
 export { BinaryOrchestrator as BinaryOrchestrator, createBinaryOrchestrator, binaryOrchestrator } from './core/binary-orchestrator.js';
 
+// Atomic Orchestrator - Lock-free operations with Atomics API
+export { AtomicOrchestrator as AtomicOrchestrator, createAtomicOrchestrator, atomicOrchestrator } from './core/atomic-orchestrator.js';
+
 // Streamlined Orchestrator - Production ready with full features (legacy)
 export { StreamlinedOrchestrator as StreamlinedOrchestrator, createStreamlinedOrchestrator, orchestrator } from './core/streamlined-orchestrator.js';
 

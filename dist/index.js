@@ -5800,6 +5800,209 @@ function createBinaryOrchestrator() {
   return new BinaryOrchestrator;
 }
 var binaryOrchestrator = createBinaryOrchestrator();
+// src/core/atomic-orchestrator.ts
+class AtomicCounter {
+  buffer;
+  view;
+  constructor(initial = 0) {
+    this.buffer = new SharedArrayBuffer(4);
+    this.view = new Int32Array(this.buffer);
+    this.view[0] = initial;
+  }
+  increment() {
+    return (Atomics.add(this.view, 0, 1) ?? 0) + 1;
+  }
+  get() {
+    return this.view[0] ?? 0;
+  }
+  compareAndSet(expected, newValue) {
+    return Atomics.compareExchange(this.view, 0, expected, newValue) === expected;
+  }
+}
+
+class AtomicSessionStorage {
+  sessions = new Map;
+  versionCounter = new AtomicCounter(0);
+  sessionCount = new AtomicCounter(0);
+  create(session) {
+    const count = this.sessionCount.increment();
+    this.sessions.set(session.id, session);
+    return count;
+  }
+  get(id) {
+    return this.sessions.get(id);
+  }
+  delete(id) {
+    const session = this.sessions.get(id);
+    if (!session)
+      return false;
+    this.sessions.delete(id);
+    return true;
+  }
+  getAll() {
+    return Array.from(this.sessions.values());
+  }
+  getVersion() {
+    return this.versionCounter.get();
+  }
+  getCount() {
+    return this.sessionCount.get();
+  }
+}
+
+class AtomicOrchestrator {
+  storage = new AtomicSessionStorage;
+  contexts = new Map;
+  messages = [];
+  events = new Map;
+  createSession(config) {
+    const session = {
+      id: `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config ?? {},
+      status: "active",
+      createdAt: new Date,
+      updatedAt: new Date
+    };
+    this.storage.create(session);
+    this.emit("session", session);
+    return session;
+  }
+  getSession(id) {
+    return this.storage.get(id);
+  }
+  updateSession(id, updates) {
+    const session = this.storage.get(id);
+    if (!session)
+      return;
+    const updated = {
+      ...session,
+      ...updates,
+      updatedAt: new Date
+    };
+    this.storage.delete(id);
+    this.storage.create(updated);
+    this.emit("session:updated", updated);
+    return updated;
+  }
+  deleteSession(id) {
+    const session = this.storage.get(id);
+    if (!session)
+      return false;
+    this.storage.delete(id);
+    this.contexts.delete(id);
+    this.emit("session:deleted", session);
+    return true;
+  }
+  setContext(sessionId, context) {
+    this.contexts.set(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.contexts.get(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    if (!this.getSession(sessionId))
+      return false;
+    this.messages.push({
+      id: message.id ?? `msg-${this.messages.length}`,
+      type: message.type ?? "user",
+      content: message.content,
+      role: message.role,
+      timestamp: message.timestamp ?? new Date,
+      metadata: message.metadata
+    });
+    this.emit("message", this.messages[this.messages.length - 1]);
+    return true;
+  }
+  processMessages() {
+    const count = this.messages.length;
+    this.messages = [];
+    return count;
+  }
+  getAllSessions() {
+    return this.storage.getAll();
+  }
+  getSessionsByType(type) {
+    const all = this.storage.getAll();
+    return all.filter((s) => s.type === type);
+  }
+  getSessionsByStatus(status) {
+    const all = this.storage.getAll();
+    return all.filter((s) => s.status === status);
+  }
+  getWorkspaceSessions(workspace) {
+    const all = this.storage.getAll();
+    return all.filter((s) => s.workspace === workspace);
+  }
+  getMetrics() {
+    const sessions = this.storage.getAll();
+    return {
+      totalSessions: this.storage.getCount(),
+      activeSessions: sessions.filter((s) => s.status === "active").length,
+      totalMessages: this.messages.length,
+      cachedContexts: this.contexts.size,
+      version: this.storage.getVersion(),
+      atomicOperations: true,
+      lockFree: true
+    };
+  }
+  getSessionCount() {
+    return this.storage.getCount();
+  }
+  clearAll() {
+    this.storage.getAll().forEach((s) => this.storage.delete(s.id));
+    this.contexts.clear();
+    this.messages = [];
+    this.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    return this.storage.getAll();
+  }
+  importSessions(sessions) {
+    sessions.forEach((s) => {
+      this.createSession({
+        type: s.type,
+        name: s.name,
+        workspace: s.workspace,
+        config: s.config
+      });
+    });
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+}
+function createAtomicOrchestrator() {
+  return new AtomicOrchestrator;
+}
+var atomicOrchestrator = createAtomicOrchestrator();
 // src/utils/simple-lru-cache.ts
 class SimpleLRUCache {
   cache = new Map;
@@ -6193,10 +6396,12 @@ export {
   createBitOrchestrator,
   createBinaryOrchestrator,
   createBenchmarkOrchestrator,
+  createAtomicOrchestrator,
   createAdaptiveOrchestrator,
   bitOrchestrator,
   binaryOrchestrator,
   benchmarkOrchestrator,
+  atomicOrchestrator,
   adaptiveOrchestrator,
   ZeroCopyOrchestrator,
   WriteHeavyOrchestrator,
@@ -6221,6 +6426,7 @@ export {
   BitOrchestrator,
   BinaryOrchestrator,
   BenchmarkOrchestrator,
+  AtomicOrchestrator,
   AdaptiveOrchestrator,
   AbstractOrchestrator
 };
