@@ -5409,6 +5409,397 @@ function createBitOrchestrator() {
   return new BitOrchestrator;
 }
 var bitOrchestrator = createBitOrchestrator();
+// src/core/binary-orchestrator.ts
+var PROTOCOL_VERSION = 1;
+class BinaryEncoder {
+  buffer;
+  offset = 0;
+  view;
+  constructor(initialSize = 4096) {
+    this.buffer = new Uint8Array(initialSize);
+    this.view = new DataView(this.buffer.buffer);
+  }
+  ensureCapacity(required) {
+    if (this.offset + required > this.buffer.length) {
+      const newSize = Math.max(this.buffer.length * 2, this.offset + required);
+      const newBuffer = new Uint8Array(newSize);
+      newBuffer.set(this.buffer);
+      this.buffer = newBuffer;
+      this.view = new DataView(this.buffer.buffer);
+    }
+  }
+  writeUint8(value) {
+    this.ensureCapacity(1);
+    this.view.setUint8(this.offset, value);
+    this.offset += 1;
+  }
+  writeUint16(value) {
+    this.ensureCapacity(2);
+    this.view.setUint16(this.offset, value, true);
+    this.offset += 2;
+  }
+  writeUint32(value) {
+    this.ensureCapacity(4);
+    this.view.setUint32(this.offset, value, true);
+    this.offset += 4;
+  }
+  writeUint64(value) {
+    this.ensureCapacity(8);
+    this.view.setBigUint64(this.offset, BigInt(value), true);
+    this.offset += 8;
+  }
+  writeString(str) {
+    const encoder = new TextEncoder;
+    const bytes = encoder.encode(str);
+    this.ensureCapacity(2 + bytes.length);
+    this.writeUint16(bytes.length);
+    this.buffer.set(bytes, this.offset);
+    this.offset += bytes.length;
+  }
+  writeBytes(bytes) {
+    this.ensureCapacity(bytes.length);
+    this.buffer.set(bytes, this.offset);
+    this.offset += bytes.length;
+  }
+  getBytes() {
+    return this.buffer.subarray(0, this.offset);
+  }
+  reset() {
+    this.offset = 0;
+  }
+  getOffset() {
+    return this.offset;
+  }
+}
+
+class BinaryDecoder {
+  buffer;
+  offset = 0;
+  view;
+  constructor(buffer) {
+    this.buffer = buffer;
+    this.view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+  readUint8() {
+    if (this.offset + 1 > this.buffer.length) {
+      throw new Error("Buffer underflow");
+    }
+    return this.view.getUint8(this.offset++);
+  }
+  readUint16() {
+    if (this.offset + 2 > this.buffer.length) {
+      throw new Error("Buffer underflow");
+    }
+    const value = this.view.getUint16(this.offset, true);
+    this.offset += 2;
+    return value;
+  }
+  readUint32() {
+    if (this.offset + 4 > this.buffer.length) {
+      throw new Error("Buffer underflow");
+    }
+    const value = this.view.getUint32(this.offset, true);
+    this.offset += 4;
+    return value;
+  }
+  readUint64() {
+    if (this.offset + 8 > this.buffer.length) {
+      throw new Error("Buffer underflow");
+    }
+    const value = this.view.getBigUint64(this.offset, true);
+    this.offset += 8;
+    return Number(value);
+  }
+  readString() {
+    const length = this.readUint16();
+    if (this.offset + length > this.buffer.length) {
+      throw new Error("Buffer underflow");
+    }
+    const bytes = this.buffer.subarray(this.offset, this.offset + length);
+    const decoder = new TextDecoder;
+    const str = decoder.decode(bytes);
+    this.offset += length;
+    return str;
+  }
+  hasMore() {
+    return this.offset < this.buffer.length;
+  }
+  getOffset() {
+    return this.offset;
+  }
+}
+
+class BinarySessionCodec {
+  encode(session) {
+    const encoder = new BinaryEncoder;
+    encoder.writeUint8(PROTOCOL_VERSION);
+    encoder.writeUint8(this.encodeSessionType(session.type));
+    encoder.writeUint8(this.encodeStatus(session.status));
+    encoder.writeUint8(0);
+    encoder.writeUint64(session.createdAt.getTime());
+    encoder.writeUint64(session.updatedAt.getTime());
+    encoder.writeString(session.id);
+    encoder.writeString(session.name);
+    encoder.writeString(session.workspace);
+    const configJson = JSON.stringify(session.config);
+    encoder.writeString(configJson);
+    return encoder.getBytes();
+  }
+  decode(data) {
+    const decoder = new BinaryDecoder(data);
+    const version = decoder.readUint8();
+    if (version !== PROTOCOL_VERSION) {
+      throw new Error(`Unsupported protocol version: ${version}`);
+    }
+    const typeCode = decoder.readUint8();
+    const statusCode = decoder.readUint8();
+    decoder.readUint8();
+    const createdAt = decoder.readUint64();
+    const updatedAt = decoder.readUint64();
+    const id = decoder.readString();
+    const name = decoder.readString();
+    const workspace = decoder.readString();
+    const configJson = decoder.readString();
+    const config = JSON.parse(configJson);
+    return {
+      id,
+      type: this.decodeSessionType(typeCode),
+      name,
+      workspace,
+      config,
+      status: this.decodeStatus(statusCode),
+      createdAt: new Date(createdAt),
+      updatedAt: new Date(updatedAt)
+    };
+  }
+  encodeSessionType(type) {
+    const mapping = {
+      agent: 1 /* Agent */,
+      task: 2 /* Task */,
+      workflow: 3 /* Workflow */,
+      session: 4 /* Session */,
+      "ai-assistant": 5 /* AIAssistant */,
+      development: 6 /* Development */,
+      testing: 7 /* Testing */,
+      deployment: 8 /* Deployment */
+    };
+    return mapping[type] ?? 1 /* Agent */;
+  }
+  decodeSessionType(code) {
+    const mapping = {
+      [1 /* Agent */]: "agent",
+      [2 /* Task */]: "task",
+      [3 /* Workflow */]: "workflow",
+      [4 /* Session */]: "session",
+      [5 /* AIAssistant */]: "ai-assistant",
+      [6 /* Development */]: "development",
+      [7 /* Testing */]: "testing",
+      [8 /* Deployment */]: "deployment"
+    };
+    return mapping[code] ?? "agent";
+  }
+  encodeStatus(status) {
+    const mapping = {
+      active: 1 /* Active */,
+      paused: 2 /* Paused */,
+      completed: 3 /* Completed */,
+      failed: 4 /* Failed */
+    };
+    return mapping[status] ?? 1 /* Active */;
+  }
+  decodeStatus(code) {
+    const mapping = {
+      [1 /* Active */]: "active",
+      [2 /* Paused */]: "paused",
+      [3 /* Completed */]: "completed",
+      [4 /* Failed */]: "failed"
+    };
+    return mapping[code] ?? "active";
+  }
+}
+
+class BinaryOrchestrator {
+  codec = new BinarySessionCodec;
+  sessions = new Map;
+  contexts = new Map;
+  messages = [];
+  events = new Map;
+  createSession(config) {
+    const session = {
+      id: `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config ?? {},
+      status: "active",
+      createdAt: new Date,
+      updatedAt: new Date
+    };
+    const binaryData = this.codec.encode(session);
+    this.sessions.set(session.id, binaryData);
+    this.emit("session", session);
+    return session;
+  }
+  getSession(id) {
+    const binaryData = this.sessions.get(id);
+    if (!binaryData)
+      return;
+    return this.codec.decode(binaryData);
+  }
+  updateSession(id, updates) {
+    const binaryData = this.sessions.get(id);
+    if (!binaryData)
+      return;
+    const session = this.codec.decode(binaryData);
+    const updated = {
+      ...session,
+      ...updates,
+      updatedAt: new Date
+    };
+    const newBinaryData = this.codec.encode(updated);
+    this.sessions.set(id, newBinaryData);
+    this.emit("session:updated", updated);
+    return updated;
+  }
+  deleteSession(id) {
+    const binaryData = this.sessions.get(id);
+    if (!binaryData)
+      return false;
+    const session = this.codec.decode(binaryData);
+    this.sessions.delete(id);
+    this.contexts.delete(id);
+    this.emit("session:deleted", session);
+    return true;
+  }
+  setContext(sessionId, context) {
+    this.contexts.set(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.contexts.get(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    if (!this.getSession(sessionId))
+      return false;
+    this.messages.push({
+      id: message.id ?? `msg-${this.messages.length}`,
+      type: message.type ?? "user",
+      content: message.content,
+      role: message.role,
+      timestamp: message.timestamp ?? new Date,
+      metadata: message.metadata
+    });
+    this.emit("message", this.messages[this.messages.length - 1]);
+    return true;
+  }
+  processMessages() {
+    const count = this.messages.length;
+    this.messages = [];
+    return count;
+  }
+  getAllSessions() {
+    const result = [];
+    for (const [_, binaryData] of this.sessions) {
+      result.push(this.codec.decode(binaryData));
+    }
+    return result;
+  }
+  getSessionsByType(type) {
+    const all = this.getAllSessions();
+    return all.filter((s) => s.type === type);
+  }
+  getSessionsByStatus(status) {
+    const all = this.getAllSessions();
+    return all.filter((s) => s.status === status);
+  }
+  getWorkspaceSessions(workspace) {
+    const all = this.getAllSessions();
+    return all.filter((s) => s.workspace === workspace);
+  }
+  getMetrics() {
+    const sessions = this.getAllSessions();
+    let totalBinarySize = 0;
+    for (const [_, binaryData] of this.sessions) {
+      totalBinarySize += binaryData.length;
+    }
+    const avgBinarySize = sessions.length > 0 ? totalBinarySize / sessions.length : 0;
+    return {
+      totalSessions: sessions.length,
+      activeSessions: sessions.filter((s) => s.status === "active").length,
+      totalMessages: this.messages.length,
+      cachedContexts: this.contexts.size,
+      totalBinarySize,
+      avgBinarySize: avgBinarySize.toFixed(0),
+      protocolVersion: PROTOCOL_VERSION,
+      binaryEncoding: true,
+      networkReady: true
+    };
+  }
+  getSessionCount() {
+    return this.sessions.size;
+  }
+  clearAll() {
+    this.sessions.clear();
+    this.contexts.clear();
+    this.messages = [];
+    this.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    return { status: "healthy", details: metrics };
+  }
+  exportSessionsBinary() {
+    return Array.from(this.sessions.values());
+  }
+  importSessionsBinary(data) {
+    for (const binaryData of data) {
+      try {
+        const session = this.codec.decode(binaryData);
+        this.sessions.set(session.id, binaryData);
+      } catch (e) {}
+    }
+  }
+  exportSessions() {
+    return this.getAllSessions();
+  }
+  importSessions(sessions) {
+    sessions.forEach((s) => {
+      this.createSession({
+        type: s.type,
+        name: s.name,
+        workspace: s.workspace,
+        config: s.config
+      });
+    });
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+}
+function createBinaryOrchestrator() {
+  return new BinaryOrchestrator;
+}
+var binaryOrchestrator = createBinaryOrchestrator();
 // src/utils/simple-lru-cache.ts
 class SimpleLRUCache {
   cache = new Map;
@@ -5800,9 +6191,11 @@ export {
   createHyperOptimizedOrchestrator,
   createHotPathOrchestrator,
   createBitOrchestrator,
+  createBinaryOrchestrator,
   createBenchmarkOrchestrator,
   createAdaptiveOrchestrator,
   bitOrchestrator,
+  binaryOrchestrator,
   benchmarkOrchestrator,
   adaptiveOrchestrator,
   ZeroCopyOrchestrator,
@@ -5826,6 +6219,7 @@ export {
   HyperOptimizedOrchestrator as HyperOrchestrator,
   HotPathOrchestrator,
   BitOrchestrator,
+  BinaryOrchestrator,
   BenchmarkOrchestrator,
   AdaptiveOrchestrator,
   AbstractOrchestrator

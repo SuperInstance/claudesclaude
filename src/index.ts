@@ -60,6 +60,9 @@ export { BenchmarkOrchestrator as BenchmarkOrchestrator, createBenchmarkOrchestr
 // Bit Orchestrator - Ultra-compact bit manipulation with extreme memory efficiency
 export { BitOrchestrator as BitOrchestrator, createBitOrchestrator, bitOrchestrator } from './core/bit-orchestrator.js';
 
+// Binary Protocol Orchestrator - Efficient binary serialization
+export { BinaryOrchestrator as BinaryOrchestrator, createBinaryOrchestrator, binaryOrchestrator } from './core/binary-orchestrator.js';
+
 // Streamlined Orchestrator - Production ready with full features (legacy)
 export { StreamlinedOrchestrator as StreamlinedOrchestrator, createStreamlinedOrchestrator, orchestrator } from './core/streamlined-orchestrator.js';
 
