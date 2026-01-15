@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Claude's Claude: Multi-Agent Development Assistant
 
 An ambitious project creating a dual-agent system with shared memory and intelligent version control for collaborative software development.
@@ -447,3 +448,35 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Note**: This is an experimental project pushing the boundaries of AI-assisted development. Always review AI-generated code before committing to production systems.
+=======
+# Claude Canvas
+
+A TUI toolkit that gives Claude Code its own display. Spawn interactive terminal interfaces for emails, calendars, flight bookings, and more.
+
+**Note:** This is a proof of concept and is unsupported.
+
+![Claude Canvas Screenshot](media/screenshot.png)
+
+## Requirements
+
+- [Bun](https://bun.sh) — used to run skill tools
+- [tmux](https://github.com/tmux/tmux) — canvases spawn in split panes
+
+## Installation
+
+Add this repository as a marketplace in Claude Code:
+
+```
+/plugin marketplace add dvdsgl/claude-canvas
+```
+
+Then install the canvas plugin:
+
+```
+/plugin install canvas@claude-canvas
+```
+
+## License
+
+MIT
+>>>>>>> d1a1ad5a76bb015da131bb38552e256cddefb11a
