@@ -14,7 +14,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "commander": "^11.1.0"
+    "commander": "^11.1.0",
+    "lru-cache": "^11.2.4",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.8",

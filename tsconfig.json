@@ -9,14 +9,15 @@
     "skipLibCheck": true,
     "noEmit": false,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "declaration": true,
     "sourceMap": true,
     "removeComments": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "downlevelIteration": true
   },
-  "include": ["src"],
+  "include": ["src", "sdk/typescript/src"],
   "exclude": ["node_modules", "dist", "tests"]
 }

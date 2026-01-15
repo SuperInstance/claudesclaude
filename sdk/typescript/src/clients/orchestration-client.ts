@@ -13,6 +13,8 @@ import { CheckpointClient } from './checkpoint-client';
 import { ConfigLoader, loadConfig } from '../utils/config-loader';
 import { Logger } from '../utils/logger';
 import { globalErrorHandler } from '../utils/error-handler';
+import { UnifiedMemoryManager } from '../utils/memory-manager';
+import { MemoryManagerOptions } from '../utils/memory-manager';
 
 export interface OrchestrationClientOptions {
   config?: Partial<OrchestrationConfig>;
@@ -20,6 +22,7 @@ export interface OrchestrationClientOptions {
   logger?: Logger;
   enableMetrics?: boolean;
   traceId?: string;
+  memoryManagerOptions?: MemoryManagerOptions;
 }
 
 export interface ClientMetrics {
@@ -29,6 +32,12 @@ export interface ClientMetrics {
   tasksExecuted: number;
   errors: number;
   memoryUsage: number;
+  memoryPressureEvents: number;
+  cacheStats: {
+    sessionCache: any;
+    contextCache: any;
+    eventManager: any;
+  };
   lastActivity: Date;
 }
 
@@ -40,6 +49,7 @@ export class OrchestrationClient extends EventEmitter {
   private workerManager?: WorkerClient;
   private sessionManager?: SessionClient;
   private checkpointManager?: CheckpointClient;
+  private memoryManager?: UnifiedMemoryManager;
 
   private startTime: Date;
   private metrics: ClientMetrics;
@@ -71,8 +81,20 @@ export class OrchestrationClient extends EventEmitter {
       tasksExecuted: 0,
       errors: 0,
       memoryUsage: 0,
+      memoryPressureEvents: 0,
+      cacheStats: {
+        sessionCache: {},
+        contextCache: {},
+        eventManager: {}
+      },
       lastActivity: new Date()
     };
+
+    // Initialize memory manager
+    this.memoryManager = new UnifiedMemoryManager(options.memoryManagerOptions);
+
+    // Set up memory monitoring
+    this.setupMemoryMonitoring();
 
     // Initialize clients
     this.initializeClients();
@@ -179,7 +201,14 @@ export class OrchestrationClient extends EventEmitter {
 
   private updateMetrics(): void {
     this.metrics.uptime = Date.now() - this.startTime.getTime();
-    this.metrics.memoryUsage = process.memoryUsage().heapUsed;
+
+    if (this.memoryManager) {
+      const memoryMetrics = this.memoryManager.getMetrics();
+      this.metrics.memoryUsage = memoryMetrics.totalMemoryUsage;
+      this.metrics.memoryPressureEvents = memoryMetrics.memoryPressureEvents;
+    } else {
+      this.metrics.memoryUsage = process.memoryUsage().heapUsed;
+    }
 
     // Update last activity
     this.metrics.lastActivity = new Date();
@@ -192,6 +221,30 @@ export class OrchestrationClient extends EventEmitter {
    */
   getConfig(): OrchestrationConfig {
     return { ...this.config };
+  }
+
+  private setupMemoryMonitoring(): void {
+    if (!this.memoryManager) return;
+
+    // Listen for memory pressure events
+    this.memoryManager.on('memoryPressure', (memorySummary) => {
+      this.logger.warn('Memory pressure detected', memorySummary, { traceId: this.traceId });
+      this.metrics.memoryPressureEvents++;
+      this.emit('memoryPressure', memorySummary);
+    });
+
+    // Listen for memory usage updates
+    this.memoryManager.on('memoryUsage', (metrics) => {
+      // Update metrics periodically
+      this.updateMetrics();
+    });
+
+    // Set up regular memory optimization
+    setInterval(() => {
+      if (this.memoryManager) {
+        this.memoryManager.optimizeMemory();
+      }
+    }, 300000); // Optimize every 5 minutes
   }
 
   /**
@@ -216,7 +269,48 @@ export class OrchestrationClient extends EventEmitter {
    * Get client metrics
    */
   getMetrics(): ClientMetrics {
+    // Update memory metrics
+    if (this.memoryManager) {
+      const memoryMetrics = this.memoryManager.getMetrics();
+      const memorySummary = this.memoryManager.getMemorySummary();
+      const cacheStats = this.memoryManager.getCacheStatistics();
+
+      this.metrics.memoryUsage = memoryMetrics.totalMemoryUsage;
+      this.metrics.memoryPressureEvents = memoryMetrics.memoryPressureEvents;
+      this.metrics.cacheStats = cacheStats;
+    }
+
+    // Update last activity
+    this.metrics.lastActivity = new Date();
+
     return { ...this.metrics };
+  }
+
+  /**
+   * Update memory manager settings
+   */
+  updateMemorySettings(settings: any): void {
+    if (this.memoryManager) {
+      this.memoryManager.updateMemorySettings(settings);
+      this.logger.info('Memory settings updated', { traceId: this.traceId });
+    }
+  }
+
+  /**
+   * Get memory summary
+   */
+  getMemorySummary() {
+    return this.memoryManager?.getMemorySummary();
+  }
+
+  /**
+   * Force memory cleanup
+   */
+  async forceMemoryCleanup(): Promise<void> {
+    if (this.memoryManager) {
+      await this.memoryManager.forceCleanup();
+      this.logger.info('Memory cleanup completed', { traceId: this.traceId });
+    }
   }
 
   /**
@@ -284,17 +378,48 @@ export class OrchestrationClient extends EventEmitter {
   }
 
   private checkMemoryHealth(): { status: 'healthy' | 'degraded' | 'unhealthy'; details?: any } {
-    const memoryUsage = process.memoryUsage();
-    const heapUsage = memoryUsage.heapUsed / memoryUsage.heapLimit;
+    if (!this.memoryManager) {
+      const memoryUsage = process.memoryUsage();
+      const heapUsage = memoryUsage.heapUsed / memoryUsage.heapLimit;
 
-    return {
-      status: heapUsage > 0.9 ? 'unhealthy' : heapUsage > 0.7 ? 'degraded' : 'healthy',
-      details: {
-        heapUsed: memoryUsage.heapUsed,
-        heapLimit: memoryUsage.heapLimit,
-        heapUsagePercentage: heapUsage
-      }
+      return {
+        status: heapUsage > 0.9 ? 'unhealthy' : heapUsage > 0.7 ? 'degraded' : 'healthy',
+        details: {
+          heapUsed: memoryUsage.heapUsed,
+          heapLimit: memoryUsage.heapLimit,
+          heapUsagePercentage: heapUsage,
+          managerStatus: 'not-available'
+        }
+      };
+    }
+
+    const memorySummary = this.memoryManager.getMemorySummary();
+    const heapUsage = memorySummary.heapUsagePercentage;
+
+    let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+    let details: any = {
+      heapUsed: memorySummary.heapUsage,
+      heapLimit: memorySummary.heapLimit,
+      heapUsagePercentage: heapUsage,
+      cacheSizes: memorySummary.cacheSizes,
+      memoryPressure: memorySummary.memoryPressure,
+      managerStatus: 'active'
     };
+
+    if (heapUsage > 0.9) {
+      status = 'unhealthy';
+      details.alert = 'Critical memory pressure';
+    } else if (heapUsage > 0.7) {
+      status = 'degraded';
+      details.alert = 'Elevated memory usage';
+    }
+
+    if (memorySummary.memoryPressure) {
+      details.alert = 'Memory pressure detected';
+      this.emit('memoryPressure', memorySummary);
+    }
+
+    return { status, details };
   }
 
   /**
@@ -310,7 +435,13 @@ export class OrchestrationClient extends EventEmitter {
     this.logger.info('Starting graceful shutdown', { traceId: this.traceId });
 
     try {
-      // Shutdown workers first
+      // Shutdown memory manager first
+      if (this.memoryManager) {
+        await this.memoryManager.shutdown();
+        this.logger.info('Memory manager shutdown complete', { traceId: this.traceId });
+      }
+
+      // Shutdown workers
       if (this.workerManager) {
         await this.workerManager.shutdown();
         this.logger.info('Worker manager shutdown complete', { traceId: this.traceId });
@@ -357,6 +488,10 @@ export class OrchestrationClient extends EventEmitter {
 
   get checkpoints() {
     return this.checkpointManager;
+  }
+
+  get memory() {
+    return this.memoryManager;
   }
 
   get uptime(): number {

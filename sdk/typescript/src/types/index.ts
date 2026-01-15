@@ -2,22 +2,17 @@
  * Core types and interfaces for the Orchestration SDK
  */
 
-// Export all types from the core system
+// Export all types from our simple types
 export {
   SessionType,
   MessageType,
   MessagePriority,
   SessionStatus,
-  WorkflowStepType,
-  VerificationType,
   WorkerTaskType,
   WorkerState,
   TaskPriority,
   TaskStatus,
-  WorkerMessageType
-} from '../../claudesclaude/dist/src/core/types';
-
-export {
+  WorkerMessageType,
   OrchestrationError,
   ValidationError,
   SessionNotFoundError,
@@ -28,7 +23,10 @@ export {
   ContextConflictError,
   DepartmentNotFoundError,
   ExecutionError
-} from '../../claudesclaude/dist/src/core/types';
+} from './simple-types';
+
+// Export utilities
+export { Logger, LogLevel } from '../utils/simple-logger';
 
 // Message types
 export interface Message {
