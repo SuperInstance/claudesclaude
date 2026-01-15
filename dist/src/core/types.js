@@ -11,13 +11,13 @@ export function createSession(type, name, workspace) {
         updatedAt: new Date(now)
     };
 }
-export function createMessage(type, data, source) {
+export function createMessage(type, content, metadata) {
     const now = Date.now();
     return {
         id: `msg-${now}-${Math.random().toString(36).slice(2, 11)}`,
         type,
-        source,
-        data,
+        content,
+        metadata,
         timestamp: new Date(now)
     };
 }

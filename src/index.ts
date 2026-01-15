@@ -3,10 +3,21 @@
  * Ultra-streamlined multi-agent orchestration with maximum efficiency
  */
 
-// Primary orchestrator - Ultra-streamlined version (highest performance)
-export { UltraStreamlinedOrchestrator as UnifiedOrchestrator, createUltraStreamlinedOrchestrator, ultraOrchestrator } from './core/ultra-streamlined-orchestrator.js';
+// Performance-optimized orchestrators (from fastest to most feature-complete)
 
-// Streamlined version (maintains backwards compatibility)
+// Ultimate Orchestrator - Maximum performance with zero abstraction overhead
+export { UltimateOrchestrator as UnifiedOrchestrator, createUltimateOrchestrator, ultimateOrchestrator } from './core/ultimate-orchestrator.js';
+
+// Hyper-Optimized Orchestrator - Extreme performance optimization
+export { HyperOptimizedOrchestrator as HyperOrchestrator, createHyperOptimizedOrchestrator, hyperOrchestrator } from './core/hyper-optimized-orchestrator.js';
+
+// Micro Orchestrator - Minimal overhead implementation
+export { MicroOrchestrator as MicroOrchestrator, createMicroOrchestrator, microOrchestrator } from './core/micro-orchestrator.js';
+
+// Ultra-Streamlined Orchestrator - High performance with simplicity
+export { UltraStreamlinedOrchestrator as UltraStreamlinedOrchestrator, createUltraStreamlinedOrchestrator, ultraOrchestrator } from './core/ultra-streamlined-orchestrator.js';
+
+// Streamlined Orchestrator - Production ready with full features
 export { StreamlinedOrchestrator as StreamlinedOrchestrator, createStreamlinedOrchestrator, orchestrator } from './core/streamlined-orchestrator.js';
 
 // Core types
