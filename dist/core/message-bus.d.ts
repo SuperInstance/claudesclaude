@@ -6,5 +6,8 @@ export declare class MessageBus extends EventEmitter {
     subscribe(callback: (message: Message) => void): void;
     getMessages(): Message[];
     clear(): void;
+    processQueue(): void;
+    get gcInterval(): any;
+    shutdown(): void;
 }
-export declare function createMessageBus(): MessageBus;
+export declare function createMessageBus(config?: any): MessageBus;

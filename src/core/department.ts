@@ -7,7 +7,8 @@ export class Department {
 
   constructor(config: any) {
     this.config = config;
-    this.orchestration = new OrchestrationSystem();
+    // If orchestration is provided in config, use it
+    this.orchestration = config.orchestration || new OrchestrationSystem();
   }
 
   async createSession(config: {
@@ -25,5 +26,26 @@ export class Department {
 
   getAllSessions(): Session[] {
     return this.orchestration.getAllSessions();
+  }
+
+  // Additional department methods
+  getDepartmentMetrics(): {
+    sessionCount: number;
+    activeSessions: number;
+    averageResponseTime: number;
+  } {
+    const sessions = this.getAllSessions();
+    const activeSessions = sessions.filter(s => s.status === 'active').length;
+
+    return {
+      sessionCount: sessions.length,
+      activeSessions,
+      averageResponseTime: 0 // Would calculate actual metrics
+    };
+  }
+
+  shutdown(): Promise<void> {
+    // Implementation would clean up department resources
+    return Promise.resolve();
   }
 }

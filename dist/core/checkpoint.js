@@ -16,5 +16,18 @@ export class CheckpointManager {
     deleteCheckpoint(id) {
         this.checkpoints.delete(id);
     }
+    restoreCheckpoint(id) {
+        const checkpoint = this.getCheckpoint(id);
+        if (checkpoint) {
+            return checkpoint.data;
+        }
+        return undefined;
+    }
+    getCheckpointsBySession(sessionId) {
+        return Array.from(this.checkpoints.values()).filter(checkpoint => checkpoint.sessionId === sessionId);
+    }
+    shutdown() {
+        this.checkpoints.clear();
+    }
 }
 //# sourceMappingURL=checkpoint.js.map

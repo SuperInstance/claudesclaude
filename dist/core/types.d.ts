@@ -1,8 +1,9 @@
 export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment';
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
-export type MessageType = 'system' | 'user' | 'agent' | 'task';
+export type MessageType = 'system' | 'user' | 'agent' | 'task' | 'command' | 'query' | 'response';
 export type WorkflowStepType = 'initialize' | 'execute' | 'validate' | 'complete';
 export type CheckpointType = 'auto' | 'manual' | 'scheduled';
+export type MessagePriority = 'low' | 'normal' | 'high' | 'critical';
 export interface Session {
     id: string;
     type: SessionType;
@@ -16,20 +17,10 @@ export interface Session {
 export interface Message {
     id: string;
     type: string;
-    payload: any;
-    timestamp: Date;
     source: string;
     target?: string;
-}
-export interface Task {
-    id: string;
-    name: string;
-    type: string;
-    priority: number;
-    payload: Record<string, any>;
-    timeoutMs: number;
-    retries: number;
-    maxRetries: number;
+    data: any;
+    timestamp: Date;
 }
 export interface Checkpoint {
     id: string;
@@ -87,17 +78,13 @@ export interface SecurityConfig {
 }
 export type SessionId = string;
 export declare function createSession(type: SessionType, name: string, workspace: string): Session;
-export declare function createMessage(type: string, payload: any, source: string): Message;
+export declare function createMessage(type: string, data: any, source: string): Message;
 export declare class SessionNotFoundError extends Error {
     constructor(sessionId: SessionId);
 }
-export interface Task {
-    id: string;
-    name: string;
-    type: string;
-    priority: number;
-    payload: Record<string, any>;
-    timeoutMs: number;
-    retries: number;
-    maxRetries: number;
+export declare class MessageTimeoutError extends Error {
+    constructor(messageId: string, timeout: number);
+}
+export declare class WorkflowError extends Error {
+    constructor(workflowId: string, message: string);
 }

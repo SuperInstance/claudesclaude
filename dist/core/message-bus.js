@@ -19,8 +19,27 @@ export class MessageBus extends EventEmitter {
     clear() {
         this.messages.clear();
     }
+    processQueue() {
+        const messages = this.getMessages();
+        messages.forEach(message => {
+            this.emit('processed', message);
+        });
+    }
+    get gcInterval() {
+        return null;
+    }
+    shutdown() {
+        this.clear();
+        this.removeAllListeners();
+    }
 }
-export function createMessageBus() {
-    return new MessageBus();
+export function createMessageBus(config) {
+    const messageBus = new MessageBus();
+    if (config && config.enableQueueProcessing) {
+        setInterval(() => {
+            messageBus.processQueue();
+        }, config.queueProcessingInterval || 5000);
+    }
+    return messageBus;
 }
 //# sourceMappingURL=message-bus.js.map

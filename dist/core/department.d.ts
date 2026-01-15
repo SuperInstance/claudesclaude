@@ -11,4 +11,10 @@ export declare class Department {
     }): Promise<Session>;
     getSession(id: string): Session | undefined;
     getAllSessions(): Session[];
+    getDepartmentMetrics(): {
+        sessionCount: number;
+        activeSessions: number;
+        averageResponseTime: number;
+    };
+    shutdown(): Promise<void>;
 }

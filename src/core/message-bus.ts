@@ -26,8 +26,37 @@ export class MessageBus extends EventEmitter {
   clear(): void {
     this.messages.clear();
   }
+
+  // Additional message bus methods
+  processQueue(): void {
+    // Process any queued messages
+    const messages = this.getMessages();
+    messages.forEach(message => {
+      this.emit('processed', message);
+    });
+  }
+
+  get gcInterval(): any {
+    // Return garbage collection interval configuration
+    return null; // Implementation would return actual interval
+  }
+
+  shutdown(): void {
+    this.clear();
+    // Remove all event listeners
+    this.removeAllListeners();
+  }
 }
 
-export function createMessageBus(): MessageBus {
-  return new MessageBus();
+export function createMessageBus(config?: any): MessageBus {
+  const messageBus = new MessageBus();
+
+  // Add queue processing functionality if config provided
+  if (config && config.enableQueueProcessing) {
+    setInterval(() => {
+      messageBus.processQueue();
+    }, config.queueProcessingInterval || 5000);
+  }
+
+  return messageBus;
 }

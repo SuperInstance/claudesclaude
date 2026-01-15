@@ -53,6 +53,21 @@ export class OrchestrationSystem {
   deleteSession(id: string): void {
     this.sessions.delete(id);
   }
+
+  // Additional registry methods
+  loadRegistry(): Promise<void> {
+    // Implementation would load registry from storage
+    return Promise.resolve();
+  }
+
+  getAllCheckpoints(): any[] {
+    // Implementation would return all checkpoints from checkpoint manager
+    return [];
+  }
+
+  shutdown(): void {
+    this.sessions.clear();
+  }
 }
 
 export function createRegistry(): OrchestrationSystem {

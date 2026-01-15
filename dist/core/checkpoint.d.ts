@@ -10,4 +10,7 @@ export declare class CheckpointManager {
     getCheckpoint(id: string): any | undefined;
     getAllCheckpoints(): any[];
     deleteCheckpoint(id: string): void;
+    restoreCheckpoint(id: string): any | undefined;
+    getCheckpointsBySession(sessionId: string): any[];
+    shutdown(): void;
 }

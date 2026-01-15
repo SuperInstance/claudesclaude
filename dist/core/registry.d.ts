@@ -15,5 +15,8 @@ export declare class OrchestrationSystem {
     getAllSessions(): Session[];
     updateSession(id: string, updates: Partial<Session>): void;
     deleteSession(id: string): void;
+    loadRegistry(): Promise<void>;
+    getAllCheckpoints(): any[];
+    shutdown(): void;
 }
 export declare function createRegistry(): OrchestrationSystem;

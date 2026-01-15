@@ -38,6 +38,15 @@ export class OrchestrationSystem {
     deleteSession(id) {
         this.sessions.delete(id);
     }
+    loadRegistry() {
+        return Promise.resolve();
+    }
+    getAllCheckpoints() {
+        return [];
+    }
+    shutdown() {
+        this.sessions.clear();
+    }
 }
 export function createRegistry() {
     return new OrchestrationSystem();
