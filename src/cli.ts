@@ -5,6 +5,14 @@ import { createRegistry } from "./core/registry.js";
 import { Director } from "./core/director.js";
 import { ContextManager } from "./core/context.js";
 import type { SessionType } from "./core/types.js";
+import {
+  validateContextKey,
+  validateJsonInput,
+  validateWorkspacePath,
+  validateSessionType,
+  sanitizeObject,
+  createSecureError
+} from "./utils/security.js";
 
 // Global state
 const registry = createRegistry();
@@ -46,12 +54,22 @@ program
           process.exit(1);
         }
 
-        const session = await state.director.createSession({
-          type: options.type as SessionType,
-          name: options.name,
-          workspace: options.workspace,
-          config: {}
+        let session;
+        try {
+          // Security validation
+          validateWorkspacePath(options.workspace);
+          validateSessionType(options.type as SessionType);
+
+          session = await state.director.createSession({
+            type: options.type as SessionType,
+            name: options.name,
+            workspace: options.workspace,
+            config: {}
         });
+        } catch (error) {
+          console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
+          process.exit(1);
+        }
 
         console.log('Session created:', session.id);
         break;
@@ -83,21 +101,36 @@ program
         }
 
         try {
-          const value = JSON.parse(options.value);
+          // Security validation
+          validateContextKey(options.key);
+          const value = validateJsonInput(options.value);
+
           state.contextManager.setContext(options.key, value);
           console.log('Context set:', options.key);
-        } catch (e) {
-          console.error('Invalid JSON value');
+        } catch (error) {
+          console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
           process.exit(1);
         }
         break;
 
       case 'get':
-        const context = state.contextManager.getContext(options.key || '');
-        if (context) {
-          console.log(JSON.stringify(context, null, 2));
-        } else {
-          console.log('Context not found');
+        const key = options.key || '';
+
+        try {
+          // Security validation
+          validateContextKey(key);
+
+          const context = state.contextManager.getContext(key);
+          if (context) {
+            // Security: Sanitize output to prevent data leakage
+            const sanitizedContext = JSON.stringify(sanitizeObject(context), null, 2);
+            console.log(sanitizedContext);
+          } else {
+            console.log('Context not found');
+          }
+        } catch (error) {
+          console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
+          process.exit(1);
         }
         break;
 

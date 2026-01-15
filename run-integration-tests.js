@@ -161,13 +161,13 @@ const testCases = [
 
   {
     name: 'Error Handling and Recovery',
-    test: () => {
+    test: async () => {
       console.log('Testing error handling...');
 
       try {
-        const { OrchestrationSystem } = import('./src/index.js');
+        const { createRegistry } = await import('./src/index.js');
 
-        const orchestration = new OrchestrationSystem();
+        const orchestration = createRegistry();
 
         // Test invalid operations
         const nonExistentSession = orchestration.getSession('non-existent-id');
@@ -206,13 +206,13 @@ const testCases = [
 
   {
     name: 'Resource Lifecycle Management',
-    test: () => {
+    test: async () => {
       console.log('Testing resource lifecycle...');
 
       try {
-        const { OrchestrationSystem, createMessageBus, ContextManager } = import('./src/index.js');
+        const { createRegistry, createMessageBus, ContextManager } = await import('./src/index.js');
 
-        const orchestration = new OrchestrationSystem();
+        const orchestration = createRegistry();
         const messageBus = createMessageBus();
         const contextManager = new ContextManager();
 

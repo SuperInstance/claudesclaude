@@ -4,6 +4,7 @@ import { createMessageBus } from "./core/message-bus.js";
 import { createRegistry } from "./core/registry.js";
 import { Director } from "./core/director.js";
 import { ContextManager } from "./core/context.js";
+import { validateContextKey, validateJsonInput, validateWorkspacePath, validateSessionType, sanitizeObject, createSecureError } from "./utils/security.js";
 const registry = createRegistry();
 let state = {
     messageBus: createMessageBus(),
@@ -39,12 +40,21 @@ program
                 console.error('Name and workspace are required');
                 process.exit(1);
             }
-            const session = await state.director.createSession({
-                type: options.type,
-                name: options.name,
-                workspace: options.workspace,
-                config: {}
-            });
+            let session;
+            try {
+                validateWorkspacePath(options.workspace);
+                validateSessionType(options.type);
+                session = await state.director.createSession({
+                    type: options.type,
+                    name: options.name,
+                    workspace: options.workspace,
+                    config: {}
+                });
+            }
+            catch (error) {
+                console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
+                process.exit(1);
+            }
             console.log('Session created:', session.id);
             break;
         case 'list':
@@ -71,22 +81,32 @@ program
                 process.exit(1);
             }
             try {
-                const value = JSON.parse(options.value);
+                validateContextKey(options.key);
+                const value = validateJsonInput(options.value);
                 state.contextManager.setContext(options.key, value);
                 console.log('Context set:', options.key);
             }
-            catch (e) {
-                console.error('Invalid JSON value');
+            catch (error) {
+                console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
                 process.exit(1);
             }
             break;
         case 'get':
-            const context = state.contextManager.getContext(options.key || '');
-            if (context) {
-                console.log(JSON.stringify(context, null, 2));
+            const key = options.key || '';
+            try {
+                validateContextKey(key);
+                const context = state.contextManager.getContext(key);
+                if (context) {
+                    const sanitizedContext = JSON.stringify(sanitizeObject(context), null, 2);
+                    console.log(sanitizedContext);
+                }
+                else {
+                    console.log('Context not found');
+                }
             }
-            else {
-                console.log('Context not found');
+            catch (error) {
+                console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
+                process.exit(1);
             }
             break;
         case 'list':

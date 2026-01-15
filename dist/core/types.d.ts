@@ -77,6 +77,14 @@ export interface ValidationError extends Error {
     message: string;
     code: string;
 }
+export interface SecurityConfig {
+    enableInputValidation: boolean;
+    enableOutputSanitization: boolean;
+    maxKeyLength: number;
+    maxWorkspacePathLength: number;
+    blockedKeyPatterns: string[];
+    sensitiveDataFields: string[];
+}
 export type SessionId = string;
 export declare function createSession(type: SessionType, name: string, workspace: string): Session;
 export declare function createMessage(type: string, payload: any, source: string): Message;
