@@ -1,8 +1,10 @@
+import { OrchestrationSystem } from './registry.js';
 import type { Session } from './types.js';
 export declare class Department {
-    private config;
     private orchestration;
-    constructor(config: any);
+    constructor(config?: {
+        orchestration?: OrchestrationSystem;
+    });
     createSession(config: {
         type: any;
         name: string;

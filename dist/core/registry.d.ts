@@ -1,10 +1,7 @@
 import type { Session, SessionType } from './types.js';
-import { MessageBus } from './message-bus.js';
 export declare class OrchestrationSystem {
     private sessions;
-    private messageBusInstance;
-    constructor();
-    get messageBus(): MessageBus;
+    private messageBus;
     createSession(config: {
         type: SessionType;
         name: string;

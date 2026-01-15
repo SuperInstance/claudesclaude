@@ -1,12 +1,9 @@
 import { EventEmitter } from 'events';
 export class MessageBus extends EventEmitter {
     messages = new Map();
+    timer;
     publish(message) {
-        const fullMessage = {
-            ...message,
-            id: crypto.randomUUID(),
-            timestamp: new Date()
-        };
+        const fullMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
         this.messages.set(fullMessage.id, fullMessage);
         this.emit('message', fullMessage);
     }
@@ -20,10 +17,7 @@ export class MessageBus extends EventEmitter {
         this.messages.clear();
     }
     processQueue() {
-        const messages = this.getMessages();
-        messages.forEach(message => {
-            this.emit('processed', message);
-        });
+        this.getMessages().forEach(m => this.emit('processed', m));
     }
     get gcInterval() {
         return null;
@@ -31,15 +25,15 @@ export class MessageBus extends EventEmitter {
     shutdown() {
         this.clear();
         this.removeAllListeners();
+        if (this.timer)
+            clearInterval(this.timer);
     }
 }
 export function createMessageBus(config) {
-    const messageBus = new MessageBus();
-    if (config && config.enableQueueProcessing) {
-        setInterval(() => {
-            messageBus.processQueue();
-        }, config.queueProcessingInterval || 5000);
+    const bus = new MessageBus();
+    if (config?.enableQueueProcessing) {
+        setInterval(() => bus.processQueue(), config.queueProcessingInterval || 5000);
     }
-    return messageBus;
+    return bus;
 }
 //# sourceMappingURL=message-bus.js.map

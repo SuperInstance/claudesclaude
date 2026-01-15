@@ -2,23 +2,11 @@ import type { Session, SessionType } from './types.js';
 import { MessageBus } from './message-bus.js';
 
 export class OrchestrationSystem {
-  private sessions: Map<string, Session> = new Map();
-  private messageBusInstance: MessageBus;
+  private sessions = new Map<string, Session>();
+  private messageBus = new MessageBus();
 
-  constructor() {
-    this.messageBusInstance = new MessageBus();
-  }
-
-  get messageBus() {
-    return this.messageBusInstance;
-  }
-
-  async createSession(config: {
-    type: SessionType;
-    name: string;
-    workspace: string;
-    config?: Record<string, any>;
-  }): Promise<Session> {
+  async createSession(config: { type: SessionType; name: string; workspace: string; config?: Record<string, any> }): Promise<Session> {
+    const now = Date.now();
     const session: Session = {
       id: crypto.randomUUID(),
       type: config.type,
@@ -26,8 +14,8 @@ export class OrchestrationSystem {
       workspace: config.workspace,
       config: config.config || {},
       status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date(now),
+      updatedAt: new Date(now)
     };
 
     this.sessions.set(session.id, session);
@@ -54,14 +42,11 @@ export class OrchestrationSystem {
     this.sessions.delete(id);
   }
 
-  // Additional registry methods
   loadRegistry(): Promise<void> {
-    // Implementation would load registry from storage
     return Promise.resolve();
   }
 
   getAllCheckpoints(): any[] {
-    // Implementation would return all checkpoints from checkpoint manager
     return [];
   }
 
@@ -70,6 +55,6 @@ export class OrchestrationSystem {
   }
 }
 
-export function createRegistry(): OrchestrationSystem {
+export function createRegistry() {
   return new OrchestrationSystem();
 }

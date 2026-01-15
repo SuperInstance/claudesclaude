@@ -1,7 +1,7 @@
 export declare class ContextManager {
     private contexts;
     private contextWindows;
-    getContext(id: string): any | undefined;
+    getContext(id: string): any;
     setContext(id: string, context: any): void;
     getAllContexts(): any[];
     createContextWindow(windowId: string, maxItems?: number): void;

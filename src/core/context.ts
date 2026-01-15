@@ -1,61 +1,52 @@
 export class ContextManager {
-  private contexts: Map<string, any> = new Map();
-  private contextWindows: Map<string, any[]> = new Map();
+  private contexts = new Map<string, any>();
+  private contextWindows = new Map<string, any[]>();
 
-  getContext(id: string): any | undefined {
+  getContext(id: string) {
     return this.contexts.get(id);
   }
 
-  setContext(id: string, context: any): void {
+  setContext(id: string, context: any) {
     this.contexts.set(id, context);
   }
 
-  getAllContexts(): any[] {
+  getAllContexts() {
     return Array.from(this.contexts.values());
   }
 
-  // Enhanced context management methods
-  createContextWindow(windowId: string, maxItems: number = 100): void {
+  createContextWindow(windowId: string, maxItems = 100) {
     this.contextWindows.set(windowId, []);
   }
 
-  addContextItem(windowId: string, item: any): void {
+  addContextItem(windowId: string, item: any) {
     const window = this.contextWindows.get(windowId);
-    if (window) {
-      window.push(item);
-      // Keep only the most recent items
-      const maxItems = window.length > 5 ? 5 : 100; // Use test default or configured max
-      if (window.length > maxItems) {
-        window.splice(0, window.length - maxItems);
-      }
-    }
+    if (!window) return;
+
+    window.push(item);
+    const max = window.length > 5 ? 5 : 100;
+    if (window.length > max) window.splice(0, window.length - max);
   }
 
-  getContextWindow(windowId: string): any[] {
+  getContextWindow(windowId: string) {
     return this.contextWindows.get(windowId) || [];
   }
 
-  getContextStats(): {
-    totalContexts: number;
-    totalContextWindows: number;
-    averageContextSize: number;
-  } {
-    const contexts = Array.from(this.contexts.values());
-    const windows = Array.from(this.contextWindows.values());
-    const totalItems = windows.reduce((sum, window) => sum + window.length, 0);
+  getContextStats() {
+    let totalItems = 0;
+    this.contextWindows.forEach(w => totalItems += w.length);
 
     return {
       totalContexts: this.contexts.size,
       totalContextWindows: this.contextWindows.size,
-      averageContextSize: contexts.length > 0 ? totalItems / contexts.length : 0
+      averageContextSize: this.contexts.size ? totalItems / this.contexts.size : 0
     };
   }
 
-  getContextItems(windowId: string): any[] {
+  getContextItems(windowId: string) {
     return this.getContextWindow(windowId);
   }
 
-  shutdown(): void {
+  shutdown() {
     this.contexts.clear();
     this.contextWindows.clear();
   }

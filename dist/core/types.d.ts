@@ -1,4 +1,4 @@
-export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment';
+export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment' | 'director' | 'department' | 'observer';
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 export type MessageType = 'system' | 'user' | 'agent' | 'task' | 'command' | 'query' | 'response';
 export type WorkflowStepType = 'initialize' | 'execute' | 'validate' | 'complete';
@@ -30,6 +30,16 @@ export interface Checkpoint {
     data: any;
     createdAt: Date;
     expiresAt?: Date;
+}
+export interface Task {
+    id: string;
+    name: string;
+    type: string;
+    priority: number;
+    payload: Record<string, any>;
+    timeoutMs: number;
+    retries: number;
+    maxRetries: number;
 }
 export interface DepartmentConfig {
     id: string;

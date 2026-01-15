@@ -2,15 +2,11 @@ import { EventEmitter } from 'events';
 import type { Message } from './types.js';
 
 export class MessageBus extends EventEmitter {
-  private messages: Map<string, Message> = new Map();
+  private messages = new Map<string, Message>();
+  private timer?: NodeJS.Timeout;
 
   publish(message: Omit<Message, 'id' | 'timestamp'>): void {
-    const fullMessage: Message = {
-      ...message,
-      id: crypto.randomUUID(),
-      timestamp: new Date()
-    };
-
+    const fullMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     this.messages.set(fullMessage.id, fullMessage);
     this.emit('message', fullMessage);
   }
@@ -27,36 +23,25 @@ export class MessageBus extends EventEmitter {
     this.messages.clear();
   }
 
-  // Additional message bus methods
   processQueue(): void {
-    // Process any queued messages
-    const messages = this.getMessages();
-    messages.forEach(message => {
-      this.emit('processed', message);
-    });
+    this.getMessages().forEach(m => this.emit('processed', m));
   }
 
-  get gcInterval(): any {
-    // Return garbage collection interval configuration
-    return null; // Implementation would return actual interval
+  get gcInterval() {
+    return null;
   }
 
   shutdown(): void {
     this.clear();
-    // Remove all event listeners
     this.removeAllListeners();
+    if (this.timer) clearInterval(this.timer);
   }
 }
 
-export function createMessageBus(config?: any): MessageBus {
-  const messageBus = new MessageBus();
-
-  // Add queue processing functionality if config provided
-  if (config && config.enableQueueProcessing) {
-    setInterval(() => {
-      messageBus.processQueue();
-    }, config.queueProcessingInterval || 5000);
+export function createMessageBus(config?: { enableQueueProcessing?: boolean; queueProcessingInterval?: number }): MessageBus {
+  const bus = new MessageBus();
+  if (config?.enableQueueProcessing) {
+    setInterval(() => bus.processQueue(), config.queueProcessingInterval || 5000);
   }
-
-  return messageBus;
+  return bus;
 }

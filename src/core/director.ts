@@ -4,20 +4,15 @@ import type { Session } from './types.js';
 export class Director {
   private config: { maxConcurrentSessions: number };
   private orchestration: OrchestrationSystem;
-  private workflows: Map<string, any> = new Map();
-  private eventHandlers: Map<string, Function[]> = new Map();
+  private workflows = new Map<string, any>();
+  private eventHandlers = new Map<string, Function[]>();
 
   constructor(config: { maxConcurrentSessions: number }, orchestration?: OrchestrationSystem) {
     this.config = config;
     this.orchestration = orchestration || new OrchestrationSystem();
   }
 
-  async createSession(config: {
-    type: any;
-    name: string;
-    workspace: string;
-    config?: any;
-  }): Promise<Session> {
+  async createSession(config: { type: any; name: string; workspace: string; config?: any }): Promise<Session> {
     return this.orchestration.createSession(config);
   }
 
@@ -29,13 +24,7 @@ export class Director {
     return this.orchestration.getAllSessions();
   }
 
-  // Workflow management methods
-  createWorkflow(workflow: {
-    id: string;
-    name: string;
-    steps: any[];
-    config?: any;
-  }): void {
+  createWorkflow(workflow: { id: string; name: string; steps: any[]; config?: any }): void {
     this.workflows.set(workflow.id, workflow);
   }
 
@@ -43,18 +32,12 @@ export class Director {
     return this.workflows.get(id);
   }
 
-  registerQualityGate(gate: {
-    name: string;
-    check: (session: Session) => Promise<boolean>;
-  }): void {
+  registerQualityGate(gate: { name: string; check: (session: Session) => Promise<boolean> }): void {
     // Implementation would register quality gate validation
   }
 
-  // Event emitter functionality
   on(event: string, handler: Function): void {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, []);
-    }
+    if (!this.eventHandlers.has(event)) this.eventHandlers.set(event, []);
     this.eventHandlers.get(event)!.push(handler);
   }
 

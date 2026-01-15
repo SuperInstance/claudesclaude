@@ -1,6 +1,6 @@
 // Core types for the orchestration system
 
-export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment';
+export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment' | 'director' | 'department' | 'observer';
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 export type MessageType = 'system' | 'user' | 'agent' | 'task' | 'command' | 'query' | 'response';
 export type WorkflowStepType = 'initialize' | 'execute' | 'validate' | 'complete';
@@ -36,6 +36,17 @@ export interface Checkpoint {
   data: any;
   createdAt: Date;
   expiresAt?: Date;
+}
+
+export interface Task {
+  id: string;
+  name: string;
+  type: string;
+  priority: number;
+  payload: Record<string, any>;
+  timeoutMs: number;
+  retries: number;
+  maxRetries: number;
 }
 
 export interface DepartmentConfig {
@@ -91,25 +102,27 @@ export interface SecurityConfig {
 export type SessionId = string;
 
 export function createSession(type: SessionType, name: string, workspace: string): Session {
+  const now = Date.now();
   return {
-    id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `session-${now}-${Math.random().toString(36).slice(2, 11)}`,
     type,
     name,
     workspace,
     config: {},
-    status: 'active' as SessionStatus,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    status: 'active',
+    createdAt: new Date(now),
+    updatedAt: new Date(now)
   };
 }
 
 export function createMessage(type: string, data: any, source: string): Message {
+  const now = Date.now();
   return {
-    id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `msg-${now}-${Math.random().toString(36).slice(2, 11)}`,
     type,
     source,
     data,
-    timestamp: new Date()
+    timestamp: new Date(now)
   };
 }
 

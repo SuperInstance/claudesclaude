@@ -26,9 +26,8 @@ export class Director {
     registerQualityGate(gate) {
     }
     on(event, handler) {
-        if (!this.eventHandlers.has(event)) {
+        if (!this.eventHandlers.has(event))
             this.eventHandlers.set(event, []);
-        }
         this.eventHandlers.get(event).push(handler);
     }
     emit(event, data) {

@@ -1,14 +1,9 @@
 import { MessageBus } from './message-bus.js';
 export class OrchestrationSystem {
     sessions = new Map();
-    messageBusInstance;
-    constructor() {
-        this.messageBusInstance = new MessageBus();
-    }
-    get messageBus() {
-        return this.messageBusInstance;
-    }
+    messageBus = new MessageBus();
     async createSession(config) {
+        const now = Date.now();
         const session = {
             id: crypto.randomUUID(),
             type: config.type,
@@ -16,8 +11,8 @@ export class OrchestrationSystem {
             workspace: config.workspace,
             config: config.config || {},
             status: 'active',
-            createdAt: new Date(),
-            updatedAt: new Date()
+            createdAt: new Date(now),
+            updatedAt: new Date(now)
         };
         this.sessions.set(session.id, session);
         return session;

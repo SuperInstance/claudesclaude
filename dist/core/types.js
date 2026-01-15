@@ -1,22 +1,24 @@
 export function createSession(type, name, workspace) {
+    const now = Date.now();
     return {
-        id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `session-${now}-${Math.random().toString(36).slice(2, 11)}`,
         type,
         name,
         workspace,
         config: {},
         status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        createdAt: new Date(now),
+        updatedAt: new Date(now)
     };
 }
 export function createMessage(type, data, source) {
+    const now = Date.now();
     return {
-        id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `msg-${now}-${Math.random().toString(36).slice(2, 11)}`,
         type,
         source,
         data,
-        timestamp: new Date()
+        timestamp: new Date(now)
     };
 }
 export class SessionNotFoundError extends Error {

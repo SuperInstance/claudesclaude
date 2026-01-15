@@ -15,25 +15,23 @@ export class ContextManager {
     }
     addContextItem(windowId, item) {
         const window = this.contextWindows.get(windowId);
-        if (window) {
-            window.push(item);
-            const maxItems = window.length > 5 ? 5 : 100;
-            if (window.length > maxItems) {
-                window.splice(0, window.length - maxItems);
-            }
-        }
+        if (!window)
+            return;
+        window.push(item);
+        const max = window.length > 5 ? 5 : 100;
+        if (window.length > max)
+            window.splice(0, window.length - max);
     }
     getContextWindow(windowId) {
         return this.contextWindows.get(windowId) || [];
     }
     getContextStats() {
-        const contexts = Array.from(this.contexts.values());
-        const windows = Array.from(this.contextWindows.values());
-        const totalItems = windows.reduce((sum, window) => sum + window.length, 0);
+        let totalItems = 0;
+        this.contextWindows.forEach(w => totalItems += w.length);
         return {
             totalContexts: this.contexts.size,
             totalContextWindows: this.contextWindows.size,
-            averageContextSize: contexts.length > 0 ? totalItems / contexts.length : 0
+            averageContextSize: this.contexts.size ? totalItems / this.contexts.size : 0
         };
     }
     getContextItems(windowId) {

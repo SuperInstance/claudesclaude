@@ -1,9 +1,7 @@
 import { OrchestrationSystem } from './registry.js';
 export class Department {
-    config;
     orchestration;
-    constructor(config) {
-        this.config = config;
+    constructor(config = {}) {
         this.orchestration = config.orchestration || new OrchestrationSystem();
     }
     async createSession(config) {
@@ -17,10 +15,9 @@ export class Department {
     }
     getDepartmentMetrics() {
         const sessions = this.getAllSessions();
-        const activeSessions = sessions.filter(s => s.status === 'active').length;
         return {
             sessionCount: sessions.length,
-            activeSessions,
+            activeSessions: sessions.filter(s => s.status === 'active').length,
             averageResponseTime: 0
         };
     }
