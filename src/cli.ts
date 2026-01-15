@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import { createUnifiedOrchestrator } from "./core/unified.js";
+import { createUnifiedOrchestratorSimple as createUnifiedOrchestrator } from "./core/unified-simple.js";
 import type { SessionType } from "./core/types.js";
 import {
   validateContextKey,

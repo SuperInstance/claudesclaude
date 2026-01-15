@@ -90,9 +90,9 @@ export class MechanicalOrchestrator {
   private events = new Map<string, Function[]>();
 
   // Mechanical services
-  private workspaceManager: WorkspaceManager;
-  private sessionPool: SessionPool;
-  private serializationPool: ObjectPool<any>;
+  private workspaceManager!: WorkspaceManager;
+  private sessionPool!: SessionPool;
+  private serializationPool!: ObjectPool<any>;
   private connectionPoolManager = new ConnectionPoolManager();
 
   // Configuration
@@ -118,12 +118,6 @@ export class MechanicalOrchestrator {
   constructor(config: MechanicalOrchestratorConfig) {
     this.config = {
       tempPath: './temp',
-      enableSerialization: true,
-      enableObjectPooling: true,
-      enableConnectionPooling: true,
-      enableWorkspaceManagement: true,
-      enableCompression: true,
-      enableCaching: true,
       sessionPoolConfig: {
         initialSize: 50,
         maxPoolSize: 500,

@@ -6,9 +6,9 @@ export class SimpleLRUCache<K, V> {
   private maxSize: number;
   private ttl?: number;
 
-  constructor(maxSize: number, ttl?: number) {
-    this.maxSize = maxSize;
-    this.ttl = ttl;
+  constructor(options: { maxSize: number; ttl?: number }) {
+    this.maxSize = options.maxSize;
+    this.ttl = options.ttl;
   }
 
   set(key: K, value: V): void {
@@ -45,6 +45,14 @@ export class SimpleLRUCache<K, V> {
 
   values(): V[] {
     return Array.from(this.cache.values()).map(item => item.value);
+  }
+
+  keys(): K[] {
+    return Array.from(this.cache.keys());
+  }
+
+  entries(): [K, V][] {
+    return Array.from(this.cache.entries()).map(([key, item]) => [key, item.value]);
   }
 
   delete(key: K): boolean {
@@ -163,8 +171,8 @@ export class SimpleEventBatcher {
 
 // Optimized orchestrator with simplified components
 export class UnifiedOrchestratorSimple {
-  private sessionCache = new SimpleLRUCache<string, Session>(1000, 30 * 60 * 1000);
-  private contextCache = new SimpleLRUCache<string, any>(500, 60 * 60 * 1000);
+  private sessionCache = new SimpleLRUCache<string, Session>({ maxSize: 1000, ttl: 30 * 60 * 1000 });
+  private contextCache = new SimpleLRUCache<string, any>({ maxSize: 500, ttl: 60 * 60 * 1000 });
   private events = new Map<string, Set<Function>>();
   private metrics = new SimpleMetrics();
   private uuidGenerator = new FastUUIDGenerator();

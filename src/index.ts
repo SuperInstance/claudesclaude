@@ -4,7 +4,7 @@
  */
 
 // Core orchestrator
-export { UnifiedOrchestrator, createUnifiedOrchestrator } from './core/unified.js';
+export { UnifiedOrchestratorSimple as UnifiedOrchestrator, createUnifiedOrchestratorSimple as createUnifiedOrchestrator } from './core/unified-simple.js';
 export { createGitManager, GitManager } from './utils/git.js';
 
 // Mechanical operations package
