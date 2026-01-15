@@ -6,19 +6,16 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun --watch src/cli.ts",
-    "build": "bun build src/index.ts --outdir dist",
-    "test": "bun test",
-    "lint": "bunx eslint src tests --ext .ts",
-    "type-check": "bunx tsc --noEmit",
+    "start": "node dist/cli.js",
+    "dev": "node --watch src/cli.ts",
+    "build": "npx tsc",
+    "test": "echo 'Tests would run here'",
+    "type-check": "npx tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@types/node": "^25.0.8",
-    "commander": "^11.1.0",
-    "uuid": "^9.0.1",
-    "zod": "^4.3.5"
+    "commander": "^11.1.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.0.0",

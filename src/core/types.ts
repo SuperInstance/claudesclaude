@@ -37,3 +37,97 @@ export interface Task {
   maxRetries: number;
 }
 
+export interface Checkpoint {
+  id: string;
+  sessionId: string;
+  type: CheckpointType;
+  name: string;
+  data: any;
+  createdAt: Date;
+  expiresAt?: Date;
+}
+
+export interface DepartmentConfig {
+  id: string;
+  name: string;
+  domain: string;
+  maxConcurrentTasks: number;
+  taskTimeoutMs: number;
+  enableAutoScaling: boolean;
+  resourceLimits: {
+    memory: number;
+    cpu: number;
+    disk: number;
+  };
+  capabilities: string[];
+  constraints: string[];
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  type: SessionType;
+  config: DepartmentConfig;
+  sessions: Set<string>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface OrchestrationError extends Error {
+  code: string;
+  category: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  timestamp: Date;
+  sessionId?: string;
+}
+
+export interface ValidationError extends Error {
+  field: string;
+  value: any;
+  message: string;
+  code: string;
+}
+
+export type SessionId = string;
+
+export function createSession(type: SessionType, name: string, workspace: string): Session {
+  return {
+    id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    type,
+    name,
+    workspace,
+    config: {},
+    status: 'active' as SessionStatus,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+}
+
+export function createMessage(type: string, payload: any, source: string): Message {
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    type,
+    payload,
+    timestamp: new Date(),
+    source
+  };
+}
+
+export class SessionNotFoundError extends Error {
+  constructor(sessionId: SessionId) {
+    super(`Session not found: ${sessionId}`);
+    this.name = 'SessionNotFoundError';
+  }
+}
+
+export interface Task {
+  id: string;
+  name: string;
+  type: string;
+  priority: number;
+  payload: Record<string, any>;
+  timeoutMs: number;
+  retries: number;
+  maxRetries: number;
+}
+
