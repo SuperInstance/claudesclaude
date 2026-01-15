@@ -60,3 +60,8 @@ status:
 push:
 	@echo "=== Pushing to GitHub ==="
 	@git push origin main
+
+# Verify repository status
+verify:
+	@echo "=== Verifying Repository Status ==="
+	@./.github/scripts/verify-repo-status.sh
