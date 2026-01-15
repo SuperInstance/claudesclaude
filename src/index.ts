@@ -39,6 +39,24 @@ export {
   LowLatencyOrchestrator as LowLatencyOrchestrator, createLowLatencyOrchestrator, lowLatencyOrchestrator
 } from './core/specialized-orchestrators.js';
 
+// SIMD Orchestrator - Parallel processing with SIMD optimizations
+export { SimdOrchestrator as SimdOrchestrator, createSimdOrchestrator, simdOrchestrator } from './core/simd-orchestrator.js';
+
+// WebAssembly Orchestrator - Extreme performance with WASM
+export { WasmOrchestrator as WasmOrchestrator, createWasmOrchestrator, wasmOrchestrator } from './core/wasm-orchestrator.js';
+
+// JIT Orchestrator - JavaScript JIT compilation hints
+export { JitOrchestrator as JitOrchestrator, createJitOrchestrator, jitOrchestrator } from './core/jit-orchestrator.js';
+
+// Zero-Copy Orchestrator - Memory-efficient data handling
+export { ZeroCopyOrchestrator as ZeroCopyOrchestrator, createZeroCopyOrchestrator, zeroCopyOrchestrator } from './core/zerocopy-orchestrator.js';
+
+// Tiered Orchestrator - Adaptive performance optimization
+export { TieredOrchestrator as TieredOrchestrator, createTieredOrchestrator, tieredOrchestrator } from './core/tiered-orchestrator.js';
+
+// Benchmark Orchestrator - Auto-optimizing performance
+export { BenchmarkOrchestrator as BenchmarkOrchestrator, createBenchmarkOrchestrator, benchmarkOrchestrator } from './core/benchmark-orchestrator.js';
+
 // Streamlined Orchestrator - Production ready with full features (legacy)
 export { StreamlinedOrchestrator as StreamlinedOrchestrator, createStreamlinedOrchestrator, orchestrator } from './core/streamlined-orchestrator.js';
 

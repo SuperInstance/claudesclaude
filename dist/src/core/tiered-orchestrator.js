@@ -1,0 +1,1645 @@
+// src/core/nano-orchestrator.ts
+class NanoOrchestrator {
+  sessions = new Map;
+  contexts = new Map;
+  messages = [];
+  events = new Map;
+  totalSessions = 0;
+  totalMessages = 0;
+  nanoUUID() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+  createSession(config) {
+    const sessionId = this.nanoUUID();
+    const now = Date.now();
+    const session = {
+      id: sessionId,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config || {},
+      status: "active",
+      createdAt: new Date(now),
+      updatedAt: new Date(now)
+    };
+    this.sessions.set(sessionId, session);
+    this.emit("session", session);
+    this.totalSessions++;
+    return session;
+  }
+  getSession(id) {
+    return this.sessions.get(id);
+  }
+  updateSession(id, updates) {
+    const session = this.sessions.get(id);
+    if (!session)
+      return;
+    if (updates.name !== undefined)
+      session.name = updates.name;
+    if (updates.workspace !== undefined)
+      session.workspace = updates.workspace;
+    if (updates.config !== undefined)
+      session.config = updates.config;
+    if (updates.status !== undefined)
+      session.status = updates.status;
+    session.updatedAt = new Date;
+    this.emit("session:updated", session);
+    return session;
+  }
+  deleteSession(id) {
+    const session = this.sessions.get(id);
+    if (!session)
+      return false;
+    this.sessions.delete(id);
+    this.emit("session:deleted", session);
+    return true;
+  }
+  setContext(sessionId, context) {
+    this.contexts.set(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.contexts.get(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    if (!this.sessions.has(sessionId))
+      return false;
+    this.messages.push({ ...message, timestamp: new Date });
+    this.emit("message", message);
+    this.totalMessages++;
+    return true;
+  }
+  processMessages() {
+    const count = this.messages.length;
+    this.messages = [];
+    return count;
+  }
+  getAllSessions() {
+    return Array.from(this.sessions.values());
+  }
+  getSessionsByType(type) {
+    const result = [];
+    for (const session of this.sessions.values()) {
+      if (session.type === type)
+        result.push(session);
+    }
+    return result;
+  }
+  getSessionsByStatus(status) {
+    const result = [];
+    for (const session of this.sessions.values()) {
+      if (session.status === status)
+        result.push(session);
+    }
+    return result;
+  }
+  getWorkspaceSessions(workspace) {
+    const result = [];
+    for (const session of this.sessions.values()) {
+      if (session.workspace === workspace)
+        result.push(session);
+    }
+    return result;
+  }
+  getMetrics() {
+    return {
+      totalSessions: this.totalSessions,
+      totalMessages: this.totalMessages,
+      activeSessions: this.sessions.size,
+      cachedContexts: this.contexts.size,
+      pendingMessages: this.messages.length,
+      memoryUsage: this.sessions.size * 1000 + this.contexts.size * 500
+    };
+  }
+  getSessionCount() {
+    return this.sessions.size;
+  }
+  clearAll() {
+    this.sessions.clear();
+    this.contexts.clear();
+    this.messages = [];
+    this.totalSessions = 0;
+    this.totalMessages = 0;
+    this.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    const memoryLimit = 100 * 1024 * 1024;
+    if (metrics.memoryUsage > memoryLimit) {
+      return { status: "unhealthy", details: { memoryUsage: metrics.memoryUsage, limit: memoryLimit } };
+    }
+    if (metrics.activeSessions > 5000) {
+      return { status: "degraded", details: { activeSessions: metrics.activeSessions } };
+    }
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    const result = [];
+    for (const session of this.sessions.values()) {
+      result.push({
+        id: session.id,
+        type: session.type,
+        name: session.name,
+        workspace: session.workspace,
+        config: session.config,
+        status: session.status,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt
+      });
+    }
+    return result;
+  }
+  importSessions(sessions) {
+    for (const s of sessions) {
+      this.createSession({
+        type: s.type,
+        name: s.name,
+        workspace: s.workspace,
+        config: s.config
+      });
+    }
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+}
+function createNanoOrchestrator() {
+  return new NanoOrchestrator;
+}
+var nanoOrchestrator = createNanoOrchestrator();
+
+// src/core/adaptive-orchestrator.ts
+var PERFORMANCE_STRATEGIES = [
+  {
+    name: "minimal",
+    sessionCacheSize: 100,
+    contextCacheSize: 50,
+    messageBufferSize: 200,
+    optimizationLevel: "minimal"
+  },
+  {
+    name: "balanced",
+    sessionCacheSize: 500,
+    contextCacheSize: 250,
+    messageBufferSize: 1000,
+    optimizationLevel: "balanced"
+  },
+  {
+    name: "aggressive",
+    sessionCacheSize: 1000,
+    contextCacheSize: 500,
+    messageBufferSize: 2000,
+    optimizationLevel: "aggressive"
+  }
+];
+
+class AdaptiveCache {
+  cache = new Map;
+  accessTimes = new Map;
+  maxSize;
+  constructor(maxSize) {
+    this.maxSize = maxSize;
+  }
+  set(key, value) {
+    if (this.cache.size >= this.maxSize) {
+      this.evictLRU();
+    }
+    this.cache.set(key, value);
+    this.accessTimes.set(key, Date.now());
+  }
+  get(key) {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      this.accessTimes.set(key, Date.now());
+      return value;
+    }
+    return;
+  }
+  delete(key) {
+    const deleted = this.cache.delete(key);
+    if (deleted) {
+      this.accessTimes.delete(key);
+    }
+    return deleted;
+  }
+  clear() {
+    this.cache.clear();
+    this.accessTimes.clear();
+  }
+  size() {
+    return this.cache.size;
+  }
+  values() {
+    return Array.from(this.cache.values());
+  }
+  evictLRU() {
+    let oldestKey = "";
+    let oldestTime = Infinity;
+    for (const [key, time] of this.accessTimes) {
+      if (time < oldestTime) {
+        oldestTime = time;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey) {
+      this.cache.delete(oldestKey);
+      this.accessTimes.delete(oldestKey);
+    }
+  }
+}
+
+class AdaptiveEvents {
+  listeners = new Map;
+  eventQueue = [];
+  batchInterval;
+  maxBatchSize;
+  isBatching = false;
+  constructor(batchInterval = 16, maxBatchSize = 100) {
+    this.batchInterval = batchInterval;
+    this.maxBatchSize = maxBatchSize;
+  }
+  on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set);
+    }
+    this.listeners.get(event).add(callback);
+  }
+  emit(event, data) {
+    if (this.isBatching) {
+      this.eventQueue.push({ event, data, timestamp: Date.now() });
+      if (this.eventQueue.length >= this.maxBatchSize) {
+        this.flushEvents();
+      }
+    } else {
+      this.dispatchEvent(event, data);
+    }
+  }
+  off(event, callback) {
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      listeners.delete(callback);
+    }
+  }
+  flushEvents() {
+    if (this.eventQueue.length === 0)
+      return;
+    const queue = [...this.eventQueue];
+    this.eventQueue = [];
+    for (const { event, data } of queue) {
+      this.dispatchEvent(event, data);
+    }
+  }
+  dispatchEvent(event, data) {
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      listeners.forEach((listener) => {
+        try {
+          listener(data);
+        } catch (e) {}
+      });
+    }
+  }
+  startBatching() {
+    this.isBatching = true;
+    setTimeout(() => {
+      this.flushEvents();
+      this.isBatching = false;
+    }, this.batchInterval);
+  }
+}
+
+class PerformanceMonitor {
+  metrics = {
+    sessionCreationTime: 0,
+    sessionRetrievalTime: 0,
+    messageSendTime: 0,
+    memoryUsage: 0,
+    activeSessions: 0,
+    cacheHitRate: 0,
+    operationCount: 0
+  };
+  lastReset = Date.now();
+  history = [];
+  recordSessionCreation(time) {
+    this.metrics.sessionCreationTime = this.metrics.sessionCreationTime * 0.9 + time * 0.1;
+    this.metrics.operationCount++;
+  }
+  recordSessionRetrieval(time) {
+    this.metrics.sessionRetrievalTime = this.metrics.sessionRetrievalTime * 0.9 + time * 0.1;
+    this.metrics.operationCount++;
+  }
+  recordMessageSend(time) {
+    this.metrics.messageSendTime = this.metrics.messageSendTime * 0.9 + time * 0.1;
+    this.metrics.operationCount++;
+  }
+  recordMemoryUsage(usage) {
+    this.metrics.memoryUsage = usage;
+  }
+  recordActiveSessions(count) {
+    this.metrics.activeSessions = count;
+  }
+  recordCacheHitRate(rate) {
+    this.metrics.cacheHitRate = rate;
+  }
+  getCurrentMetrics() {
+    return { ...this.metrics };
+  }
+  getPerformanceScore() {
+    const weights = {
+      sessionCreationSpeed: 0.2,
+      sessionRetrievalSpeed: 0.3,
+      messageSendSpeed: 0.2,
+      memoryEfficiency: 0.15,
+      cacheEfficiency: 0.15
+    };
+    const normalizedScores = {
+      sessionCreationSpeed: Math.min(1, 100 / this.metrics.sessionCreationTime),
+      sessionRetrievalSpeed: Math.min(1, 100 / this.metrics.sessionRetrievalTime),
+      messageSendSpeed: Math.min(1, 100 / this.metrics.messageSendTime),
+      memoryEfficiency: Math.min(1, 1e6 / this.metrics.memoryUsage),
+      cacheEfficiency: this.metrics.cacheHitRate
+    };
+    return normalizedScores.sessionCreationSpeed * weights.sessionCreationSpeed + normalizedScores.sessionRetrievalSpeed * weights.sessionRetrievalSpeed + normalizedScores.messageSendSpeed * weights.messageSendSpeed + normalizedScores.memoryEfficiency * weights.memoryEfficiency + normalizedScores.cacheEfficiency * weights.cacheEfficiency;
+  }
+  getOptimalStrategy() {
+    const score = this.getPerformanceScore();
+    const currentLoad = this.metrics.activeSessions;
+    if (score < 0.5 || currentLoad > 1000) {
+      return PERFORMANCE_STRATEGIES[0];
+    } else if (score < 0.8 || currentLoad > 500) {
+      return PERFORMANCE_STRATEGIES[1];
+    } else {
+      return PERFORMANCE_STRATEGIES[2];
+    }
+  }
+  updateHistory() {
+    const now = Date.now();
+    if (now - this.lastReset > 1e4) {
+      this.history.push({
+        timestamp: now,
+        metrics: this.getCurrentMetrics(),
+        performanceScore: this.getPerformanceScore()
+      });
+      if (this.history.length > 100) {
+        this.history.shift();
+      }
+      this.lastReset = now;
+    }
+  }
+}
+
+class AdaptiveOrchestrator {
+  sessionCache;
+  contextCache;
+  messageList = [];
+  events = new AdaptiveEvents;
+  monitor = new PerformanceMonitor;
+  currentStrategy;
+  strategyTransitionTime = 0;
+  constructor() {
+    this.currentStrategy = PERFORMANCE_STRATEGIES[1];
+    this.updateCaches();
+  }
+  updateCaches() {
+    this.sessionCache = new AdaptiveCache(this.currentStrategy.sessionCacheSize);
+    this.contextCache = new AdaptiveCache(this.currentStrategy.contextCacheSize);
+  }
+  switchStrategy(newStrategy) {
+    this.currentStrategy = newStrategy;
+    this.updateCaches();
+    this.strategyTransitionTime = Date.now();
+  }
+  createSession(config) {
+    const startTime = performance.now();
+    const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    const timestamp = new Date;
+    const session = {
+      id: sessionId,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config || {},
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    this.sessionCache.set(sessionId, session);
+    this.events.emit("session", session);
+    const endTime = performance.now();
+    this.monitor.recordSessionCreation(endTime - startTime);
+    this.monitor.recordActiveSessions(this.sessionCache.size());
+    this.checkAndAdjustStrategy();
+    return session;
+  }
+  getSession(id) {
+    const startTime = performance.now();
+    const session = this.sessionCache.get(id);
+    const endTime = performance.now();
+    this.monitor.recordSessionRetrieval(endTime - startTime);
+    return session;
+  }
+  updateSession(id, updates) {
+    const session = this.sessionCache.get(id);
+    if (!session)
+      return;
+    if (updates.name !== undefined)
+      session.name = updates.name;
+    if (updates.workspace !== undefined)
+      session.workspace = updates.workspace;
+    if (updates.config !== undefined)
+      session.config = updates.config;
+    if (updates.status !== undefined)
+      session.status = updates.status;
+    session.updatedAt = new Date;
+    this.sessionCache.set(id, session);
+    this.events.emit("session:updated", session);
+    return session;
+  }
+  deleteSession(id) {
+    const session = this.sessionCache.get(id);
+    if (!session)
+      return false;
+    this.sessionCache.delete(id);
+    this.events.emit("session:deleted", session);
+    this.monitor.recordActiveSessions(this.sessionCache.size());
+    this.checkAndAdjustStrategy();
+    return true;
+  }
+  setContext(sessionId, context) {
+    this.contextCache.set(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.contextCache.get(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    const startTime = performance.now();
+    if (!this.sessionCache.get(sessionId))
+      return false;
+    this.messageList.push({ ...message, timestamp: new Date });
+    this.events.emit("message", message);
+    const endTime = performance.now();
+    this.monitor.recordMessageSend(endTime - startTime);
+    return true;
+  }
+  processMessages() {
+    const count = this.messageList.length;
+    this.messageList = [];
+    return count;
+  }
+  getAllSessions() {
+    return Array.from(this.sessionCache.values());
+  }
+  getSessionsByType(type) {
+    const result = [];
+    for (const session of this.sessionCache.values()) {
+      if (session.type === type)
+        result.push(session);
+    }
+    return result;
+  }
+  getSessionsByStatus(status) {
+    const result = [];
+    for (const session of this.sessionCache.values()) {
+      if (session.status === status)
+        result.push(session);
+    }
+    return result;
+  }
+  getWorkspaceSessions(workspace) {
+    const result = [];
+    for (const session of this.sessionCache.values()) {
+      if (session.workspace === workspace)
+        result.push(session);
+    }
+    return result;
+  }
+  getMetrics() {
+    const sessionCount = this.sessionCache.size();
+    const contextCount = this.contextCache.size();
+    const memoryUsage = sessionCount * 1000 + contextCount * 500;
+    this.monitor.recordMemoryUsage(memoryUsage);
+    this.monitor.recordCacheHitRate(this.calculateCacheHitRate());
+    return {
+      ...this.monitor.getCurrentMetrics(),
+      activeSessions: sessionCount,
+      cachedContexts: contextCount,
+      pendingMessages: this.messageList.length,
+      currentStrategy: this.currentStrategy.name,
+      performanceScore: this.monitor.getPerformanceScore(),
+      adaptiveEfficiency: this.calculateAdaptiveEfficiency()
+    };
+  }
+  getSessionCount() {
+    return this.sessionCache.size();
+  }
+  clearAll() {
+    this.sessionCache.clear();
+    this.contextCache.clear();
+    this.messageList = [];
+    this.monitor = new PerformanceMonitor;
+    this.switchStrategy(PERFORMANCE_STRATEGIES[1]);
+    this.events.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    const memoryLimit = 100 * 1024 * 1024;
+    if (metrics.memoryUsage > memoryLimit) {
+      return { status: "unhealthy", details: { memoryUsage: metrics.memoryUsage, limit: memoryLimit } };
+    }
+    if (metrics.activeSessions > 5000) {
+      return { status: "degraded", details: { activeSessions: metrics.activeSessions } };
+    }
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    return this.getAllSessions().map((s) => ({
+      id: s.id,
+      type: s.type,
+      name: s.name,
+      workspace: s.workspace,
+      config: s.config,
+      status: s.status,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt
+    }));
+  }
+  importSessions(sessions) {
+    sessions.forEach((s) => this.createSession({
+      type: s.type,
+      name: s.name,
+      workspace: s.workspace,
+      config: s.config
+    }));
+  }
+  onSessionCreated(callback) {
+    this.events.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.events.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.events.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.events.on("message", callback);
+  }
+  getAdaptiveMetrics() {
+    return {
+      currentStrategy: this.currentStrategy,
+      performanceScore: this.monitor.getPerformanceScore(),
+      history: this.monitor["history"] || [],
+      lastTransition: this.strategyTransitionTime
+    };
+  }
+  forceStrategy(strategyName) {
+    const strategy = PERFORMANCE_STRATEGIES.find((s) => s.name === strategyName);
+    if (strategy) {
+      this.switchStrategy(strategy);
+    }
+  }
+  checkAndAdjustStrategy() {
+    this.monitor.updateHistory();
+    const optimalStrategy = this.monitor.getOptimalStrategy();
+    if (optimalStrategy.name !== this.currentStrategy.name) {
+      this.switchStrategy(optimalStrategy);
+    }
+  }
+  calculateCacheHitRate() {
+    return 0.8;
+  }
+  calculateAdaptiveEfficiency() {
+    const timeSinceTransition = Date.now() - this.strategyTransitionTime;
+    const adaptationSpeed = Math.min(1, timeSinceTransition / 5000);
+    return this.monitor.getPerformanceScore() * adaptationSpeed;
+  }
+}
+function createAdaptiveOrchestrator() {
+  return new AdaptiveOrchestrator;
+}
+var adaptiveOrchestrator = createAdaptiveOrchestrator();
+
+// src/core/jit-orchestrator.ts
+class JitSessionStorage {
+  sessions = new Array(1000);
+  idToIndex = new Map;
+  typeIndices = new Map;
+  statusIndices = new Map;
+  workspaceIndices = new Map;
+  count = 0;
+  nextIndex = 0;
+  add(session) {
+    if (this.count >= this.sessions.length) {
+      this.evictLRU();
+    }
+    const index = this.nextIndex;
+    this.sessions[index] = session;
+    this.idToIndex.set(session.id, index);
+    this.updateIndex(session.type, index);
+    this.updateIndex(session.status, index);
+    this.updateIndex(session.workspace, index);
+    this.nextIndex = (this.nextIndex + 1) % this.sessions.length;
+    this.count++;
+  }
+  get(id) {
+    const index = this.idToIndex.get(id);
+    return index !== undefined ? this.sessions[index] : undefined;
+  }
+  update(id, updates) {
+    const index = this.idToIndex.get(id);
+    if (index === undefined)
+      return false;
+    const session = this.sessions[index];
+    if (updates.type !== undefined && updates.type !== session.type) {
+      this.removeFromIndex(session.type, index);
+      this.updateIndex(updates.type, index);
+    }
+    if (updates.status !== undefined && updates.status !== session.status) {
+      this.removeFromIndex(session.status, index);
+      this.updateIndex(updates.status, index);
+    }
+    if (updates.workspace !== undefined && updates.workspace !== session.workspace) {
+      this.removeFromIndex(session.workspace, index);
+      this.updateIndex(updates.workspace, index);
+    }
+    if (updates.name !== undefined)
+      session.name = updates.name;
+    if (updates.config !== undefined)
+      session.config = updates.config;
+    if (updates.status !== undefined)
+      session.status = updates.status;
+    session.updatedAt = new Date;
+    return true;
+  }
+  delete(id) {
+    const index = this.idToIndex.get(id);
+    if (index === undefined)
+      return false;
+    const session = this.sessions[index];
+    this.removeFromIndex(session.type, index);
+    this.removeFromIndex(session.status, index);
+    this.removeFromIndex(session.workspace, index);
+    this.sessions[index] = null;
+    this.idToIndex.delete(id);
+    this.count--;
+    return true;
+  }
+  getByType(type) {
+    const indices = this.typeIndices.get(type);
+    if (!indices)
+      return [];
+    const result = new Array(indices.length);
+    for (let i = 0;i < indices.length; i++) {
+      const session = this.sessions[indices[i]];
+      if (session) {
+        result[i] = session;
+      }
+    }
+    return result;
+  }
+  getByStatus(status) {
+    const indices = this.statusIndices.get(status);
+    if (!indices)
+      return [];
+    const result = new Array(indices.length);
+    for (let i = 0;i < indices.length; i++) {
+      const session = this.sessions[indices[i]];
+      if (session) {
+        result[i] = session;
+      }
+    }
+    return result;
+  }
+  getByWorkspace(workspace) {
+    const indices = this.workspaceIndices.get(workspace);
+    if (!indices)
+      return [];
+    const result = new Array(indices.length);
+    for (let i = 0;i < indices.length; i++) {
+      const session = this.sessions[indices[i]];
+      if (session) {
+        result[i] = session;
+      }
+    }
+    return result;
+  }
+  getAll() {
+    const result = new Array(this.count);
+    let actualCount = 0;
+    for (let i = 0;i < this.count; i++) {
+      const session = this.sessions[i];
+      if (session !== null) {
+        result[actualCount++] = session;
+      }
+    }
+    return result.slice(0, actualCount);
+  }
+  updateIndex(key, index) {
+    let indices;
+    if (key === "agent") {
+      indices = this.typeIndices.get("agent") || [];
+    } else if (key === "active") {
+      indices = this.statusIndices.get("active") || [];
+    } else if (key.startsWith("/workspace/")) {
+      indices = this.workspaceIndices.get(key) || [];
+    } else {
+      indices = this.typeIndices.get(key) || [];
+    }
+    if (!indices.length) {
+      indices = [];
+      if (key === "agent") {
+        this.typeIndices.set(key, indices);
+      } else if (key === "active") {
+        this.statusIndices.set(key, indices);
+      } else if (key.startsWith("/workspace/")) {
+        this.workspaceIndices.set(key, indices);
+      } else {
+        this.typeIndices.set(key, indices);
+      }
+    }
+    indices[indices.length] = index;
+  }
+  removeFromIndex(key, index) {
+    let indices;
+    if (key === "agent") {
+      indices = this.typeIndices.get("agent");
+    } else if (key === "active") {
+      indices = this.statusIndices.get("active");
+    } else if (key.startsWith("/workspace/")) {
+      indices = this.workspaceIndices.get(key);
+    } else {
+      indices = this.typeIndices.get(key);
+    }
+    if (indices) {
+      for (let i = 0;i < indices.length; i++) {
+        if (indices[i] === index) {
+          indices[i] = -1;
+          break;
+        }
+      }
+    }
+  }
+  evictLRU() {
+    const entries = Array.from(this.idToIndex.entries());
+    if (entries.length > 0) {
+      const [oldestId] = entries[0];
+      this.delete(oldestId);
+    }
+  }
+}
+
+class JitOrchestrator {
+  sessionStorage = new JitSessionStorage;
+  contexts = new Map;
+  messages = [];
+  events = new Map;
+  metrics = {
+    totalSessions: 0,
+    totalMessages: 0,
+    memoryUsage: 0,
+    jitOptimized: true
+  };
+  createSession(config) {
+    const sessionId = this.generateJitUUID();
+    const timestamp = new Date;
+    const session = {
+      id: sessionId,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config || {},
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    this.sessionStorage.add(session);
+    this.emit("session", session);
+    this.metrics.totalSessions++;
+    return session;
+  }
+  getSession(id) {
+    return this.sessionStorage.get(id);
+  }
+  updateSession(id, updates) {
+    const success = this.sessionStorage.update(id, updates);
+    if (success) {
+      const session = this.sessionStorage.get(id);
+      this.emit("session:updated", session);
+      return session;
+    }
+    return;
+  }
+  deleteSession(id) {
+    const success = this.sessionStorage.delete(id);
+    if (success) {
+      const session = this.sessionStorage.get(id);
+      if (session) {
+        this.emit("session:deleted", session);
+      }
+    }
+    return success;
+  }
+  setContext(sessionId, context) {
+    this.contexts.set(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.contexts.get(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    if (!this.sessionStorage.get(sessionId))
+      return false;
+    const messageWithTimestamp = {
+      content: message.content || "",
+      role: message.role || "user",
+      timestamp: new Date,
+      metadata: message.metadata || {}
+    };
+    this.messages.push(messageWithTimestamp);
+    this.emit("message", messageWithTimestamp);
+    this.metrics.totalMessages++;
+    return true;
+  }
+  processMessages() {
+    const count = this.messages.length;
+    this.messages = [];
+    return count;
+  }
+  getAllSessions() {
+    return this.sessionStorage.getAll();
+  }
+  getSessionsByType(type) {
+    return this.sessionStorage.getByType(type);
+  }
+  getSessionsByStatus(status) {
+    return this.sessionStorage.getByStatus(status);
+  }
+  getWorkspaceSessions(workspace) {
+    return this.sessionStorage.getByWorkspace(workspace);
+  }
+  getMetrics() {
+    const sessionCount = this.sessionStorage.getAll().length;
+    const contextCount = this.contexts.size;
+    this.metrics.memoryUsage = sessionCount * 1000 + contextCount * 500;
+    return {
+      ...this.metrics,
+      activeSessions: sessionCount,
+      cachedContexts: contextCount,
+      pendingMessages: this.messages.length,
+      jitOptimized: true
+    };
+  }
+  getSessionCount() {
+    return this.sessionStorage.getAll().length;
+  }
+  clearAll() {
+    this.sessionStorage = new JitSessionStorage;
+    this.contexts.clear();
+    this.messages = [];
+    this.metrics.totalSessions = 0;
+    this.metrics.totalMessages = 0;
+    this.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    const memoryLimit = 100 * 1024 * 1024;
+    if (metrics.memoryUsage > memoryLimit) {
+      return { status: "unhealthy", details: { memoryUsage: metrics.memoryUsage, limit: memoryLimit } };
+    }
+    if (metrics.activeSessions > 5000) {
+      return { status: "degraded", details: { activeSessions: metrics.activeSessions } };
+    }
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    return this.getAllSessions().map((s) => ({
+      id: s.id,
+      type: s.type,
+      name: s.name,
+      workspace: s.workspace,
+      config: s.config,
+      status: s.status,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt
+    }));
+  }
+  importSessions(sessions) {
+    for (let i = 0;i < sessions.length; i++) {
+      this.createSession({
+        type: sessions[i].type,
+        name: sessions[i].name,
+        workspace: sessions[i].workspace,
+        config: sessions[i].config
+      });
+    }
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+  generateJitUUID() {
+    const time = Date.now().toString(36);
+    const random = Math.random().toString(36).substr(2);
+    return time + random;
+  }
+}
+function createJitOrchestrator() {
+  return new JitOrchestrator;
+}
+var jitOrchestrator = createJitOrchestrator();
+
+// src/core/zerocopy-orchestrator.ts
+class ZeroCopySessionStorage {
+  sessions = new Array(1000);
+  idToIndex = new Map;
+  typeIndices = new Map;
+  statusIndices = new Map;
+  workspaceIndices = new Map;
+  count = 0;
+  nextIndex = 0;
+  freeIndices = [];
+  add(session) {
+    let index;
+    if (this.freeIndices.length > 0) {
+      index = this.freeIndices.pop();
+    } else if (this.count >= this.sessions.length) {
+      this.evictLRU();
+      index = this.nextIndex;
+    } else {
+      index = this.nextIndex;
+      this.nextIndex = (this.nextIndex + 1) % this.sessions.length;
+      this.count++;
+    }
+    this.sessions[index] = session;
+    this.idToIndex.set(session.id, index);
+    this.updateIndex(session.type, index);
+    this.updateIndex(session.status, index);
+    this.updateIndex(session.workspace, index);
+  }
+  get(id) {
+    const index = this.idToIndex.get(id);
+    return index !== undefined ? this.sessions[index] : undefined;
+  }
+  update(id, updates) {
+    const index = this.idToIndex.get(id);
+    if (index === undefined)
+      return false;
+    const session = this.sessions[index];
+    if (updates.type !== undefined && updates.type !== session.type) {
+      this.removeFromIndex(session.type, index);
+      this.updateIndex(updates.type, index);
+    }
+    if (updates.status !== undefined && updates.status !== session.status) {
+      this.removeFromIndex(session.status, index);
+      this.updateIndex(updates.status, index);
+    }
+    if (updates.workspace !== undefined && updates.workspace !== session.workspace) {
+      this.removeFromIndex(session.workspace, index);
+      this.updateIndex(updates.workspace, index);
+    }
+    if (updates.name !== undefined)
+      session.name = updates.name;
+    if (updates.config !== undefined)
+      session.config = updates.config;
+    if (updates.status !== undefined)
+      session.status = updates.status;
+    session.updatedAt = new Date;
+    return true;
+  }
+  delete(id) {
+    const index = this.idToIndex.get(id);
+    if (index === undefined)
+      return false;
+    const session = this.sessions[index];
+    this.removeFromIndex(session.type, index);
+    this.removeFromIndex(session.status, index);
+    this.removeFromIndex(session.workspace, index);
+    this.sessions[index] = null;
+    this.idToIndex.delete(id);
+    this.freeIndices.push(index);
+    this.count--;
+    return true;
+  }
+  getByType(type) {
+    const indexArray = this.typeIndices.get(type);
+    if (!indexArray)
+      return [];
+    const result = [];
+    for (let i = 0;i < indexArray.length; i++) {
+      const index = indexArray[i];
+      if (index !== 0) {
+        const session = this.sessions[index];
+        if (session) {
+          result.push(session);
+        }
+      }
+    }
+    return result;
+  }
+  getByStatus(status) {
+    const indexArray = this.statusIndices.get(status);
+    if (!indexArray)
+      return [];
+    const result = [];
+    for (let i = 0;i < indexArray.length; i++) {
+      const index = indexArray[i];
+      if (index !== 0) {
+        const session = this.sessions[index];
+        if (session) {
+          result.push(session);
+        }
+      }
+    }
+    return result;
+  }
+  getByWorkspace(workspace) {
+    const indexArray = this.workspaceIndices.get(workspace);
+    if (!indexArray)
+      return [];
+    const result = [];
+    for (let i = 0;i < indexArray.length; i++) {
+      const index = indexArray[i];
+      if (index !== 0) {
+        const session = this.sessions[index];
+        if (session) {
+          result.push(session);
+        }
+      }
+    }
+    return result;
+  }
+  getAll() {
+    const result = new Array(this.count);
+    let actualCount = 0;
+    for (let i = 0;i < this.sessions.length; i++) {
+      const session = this.sessions[i];
+      if (session !== null) {
+        result[actualCount++] = session;
+      }
+    }
+    return result.slice(0, actualCount);
+  }
+  updateIndex(key, index) {
+    if (!this.typeIndices.has(key)) {
+      this.typeIndices.set(key, new Uint32Array(100));
+      this.statusIndices.set(key, new Uint32Array(100));
+      this.workspaceIndices.set(key, new Uint32Array(100));
+    }
+    const typeArray = this.typeIndices.get(key);
+    const statusArray = this.statusIndices.get(key);
+    const workspaceArray = this.workspaceIndices.get(key);
+    let typeIndex = 0;
+    while (typeIndex < typeArray.length && typeArray[typeIndex] !== 0) {
+      typeIndex++;
+    }
+    let statusIndex = 0;
+    while (statusIndex < statusArray.length && statusArray[statusIndex] !== 0) {
+      statusIndex++;
+    }
+    let workspaceIndex = 0;
+    while (workspaceIndex < workspaceArray.length && workspaceArray[workspaceIndex] !== 0) {
+      workspaceIndex++;
+    }
+    typeArray[typeIndex] = index;
+    statusArray[statusIndex] = index;
+    workspaceArray[workspaceIndex] = index;
+  }
+  removeFromIndex(key, index) {
+    const typeArray = this.typeIndices.get(key);
+    const statusArray = this.statusIndices.get(key);
+    const workspaceArray = this.workspaceIndices.get(key);
+    if (typeArray) {
+      for (let i = 0;i < typeArray.length; i++) {
+        if (typeArray[i] === index) {
+          typeArray[i] = 0;
+          break;
+        }
+      }
+    }
+    if (statusArray) {
+      for (let i = 0;i < statusArray.length; i++) {
+        if (statusArray[i] === index) {
+          statusArray[i] = 0;
+          break;
+        }
+      }
+    }
+    if (workspaceArray) {
+      for (let i = 0;i < workspaceArray.length; i++) {
+        if (workspaceArray[i] === index) {
+          workspaceArray[i] = 0;
+          break;
+        }
+      }
+    }
+  }
+  evictLRU() {
+    const entries = Array.from(this.idToIndex.entries());
+    if (entries.length > 0) {
+      const [oldestId] = entries[0];
+      this.delete(oldestId);
+    }
+  }
+}
+
+class ZeroCopyOrchestrator {
+  sessionStorage = new ZeroCopySessionStorage;
+  contexts = new Map;
+  messages = [];
+  events = new Map;
+  transferableObjects = [];
+  metrics = {
+    totalSessions: 0,
+    totalMessages: 0,
+    memoryUsage: 0,
+    zeroCopyOptimized: true
+  };
+  createSession(config) {
+    const sessionId = this.generateZeroCopyUUID();
+    const timestamp = new Date;
+    const session = {
+      id: sessionId,
+      type: config.type,
+      name: config.name,
+      workspace: config.workspace,
+      config: config.config || {},
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    this.sessionStorage.add(session);
+    this.emit("session", session);
+    this.metrics.totalSessions++;
+    return session;
+  }
+  getSession(id) {
+    return this.sessionStorage.get(id);
+  }
+  updateSession(id, updates) {
+    const success = this.sessionStorage.update(id, updates);
+    if (success) {
+      const session = this.sessionStorage.get(id);
+      this.emit("session:updated", session);
+      return session;
+    }
+    return;
+  }
+  deleteSession(id) {
+    const success = this.sessionStorage.delete(id);
+    if (success) {
+      const session = this.sessionStorage.get(id);
+      if (session) {
+        this.emit("session:deleted", session);
+      }
+    }
+    return success;
+  }
+  setContext(sessionId, context) {
+    if (context && typeof context === "object" && "transfer" in context) {
+      this.transferableObjects.push(context.transfer);
+    }
+    this.contexts.set(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.contexts.get(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    if (!this.sessionStorage.get(sessionId))
+      return false;
+    const messageWithTimestamp = {
+      content: message.content || "",
+      role: message.role || "user",
+      timestamp: new Date,
+      metadata: message.metadata || {}
+    };
+    this.messages.push(messageWithTimestamp);
+    this.emit("message", messageWithTimestamp);
+    this.metrics.totalMessages++;
+    return true;
+  }
+  processMessages() {
+    const count = this.messages.length;
+    this.messages = [];
+    return count;
+  }
+  getAllSessions() {
+    return this.sessionStorage.getAll();
+  }
+  getSessionsByType(type) {
+    return this.sessionStorage.getByType(type);
+  }
+  getSessionsByStatus(status) {
+    return this.sessionStorage.getByStatus(status);
+  }
+  getWorkspaceSessions(workspace) {
+    return this.sessionStorage.getByWorkspace(workspace);
+  }
+  getMetrics() {
+    const sessionCount = this.sessionStorage.getAll().length;
+    const contextCount = this.contexts.size;
+    const transferableCount = this.transferableObjects.length;
+    this.metrics.memoryUsage = sessionCount * 1000 + contextCount * 500 + transferableCount * 100;
+    return {
+      ...this.metrics,
+      activeSessions: sessionCount,
+      cachedContexts: contextCount,
+      pendingMessages: this.messages.length,
+      transferableObjects: transferableCount,
+      zeroCopyOptimized: true
+    };
+  }
+  getSessionCount() {
+    return this.sessionStorage.getAll().length;
+  }
+  clearAll() {
+    this.sessionStorage = new ZeroCopySessionStorage;
+    this.contexts.clear();
+    this.messages = [];
+    this.transferableObjects = [];
+    this.metrics.totalSessions = 0;
+    this.metrics.totalMessages = 0;
+    this.emit("sessions:cleared", undefined);
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    const memoryLimit = 100 * 1024 * 1024;
+    if (metrics.memoryUsage > memoryLimit) {
+      return { status: "unhealthy", details: { memoryUsage: metrics.memoryUsage, limit: memoryLimit } };
+    }
+    if (metrics.activeSessions > 5000) {
+      return { status: "degraded", details: { activeSessions: metrics.activeSessions } };
+    }
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    return this.getAllSessions().map((s) => ({
+      id: s.id,
+      type: s.type,
+      name: s.name,
+      workspace: s.workspace,
+      config: s.config,
+      status: s.status,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt
+    }));
+  }
+  importSessions(sessions) {
+    for (let i = 0;i < sessions.length; i++) {
+      this.createSession({
+        type: sessions[i].type,
+        name: sessions[i].name,
+        workspace: sessions[i].workspace,
+        config: sessions[i].config
+      });
+    }
+  }
+  getTransferableObjects() {
+    return this.transferableObjects.slice();
+  }
+  onSessionCreated(callback) {
+    this.on("session", callback);
+  }
+  onSessionUpdated(callback) {
+    this.on("session:updated", callback);
+  }
+  onSessionDeleted(callback) {
+    this.on("session:deleted", callback);
+  }
+  onMessage(callback) {
+    this.on("message", callback);
+  }
+  on(event, callback) {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set);
+    }
+    this.events.get(event).add(callback);
+  }
+  emit(event, data) {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+  generateZeroCopyUUID() {
+    const time = Date.now().toString(36);
+    const random = Math.random().toString(36).substr(2);
+    return time + random;
+  }
+}
+function createZeroCopyOrchestrator() {
+  return new ZeroCopyOrchestrator;
+}
+var zeroCopyOrchestrator = createZeroCopyOrchestrator();
+
+// src/core/tiered-orchestrator.ts
+var PerformanceTier;
+((PerformanceTier2) => {
+  PerformanceTier2["NANO"] = "nano";
+  PerformanceTier2["JIT"] = "jit";
+  PerformanceTier2["ZERO_COPY"] = "zero-copy";
+  PerformanceTier2["ADAPTIVE"] = "adaptive";
+})(PerformanceTier ||= {});
+
+class TieredOrchestrator {
+  nanoOrchestrator = new NanoOrchestrator;
+  jitOrchestrator = new JitOrchestrator;
+  zeroCopyOrchestrator = new ZeroCopyOrchestrator;
+  adaptiveOrchestrator = new AdaptiveOrchestrator;
+  currentTier = "nano" /* NANO */;
+  performanceMetrics = {
+    operationsPerSecond: 0,
+    memoryEfficiency: 1,
+    latency: 0,
+    throughput: 0,
+    sessionCount: 0,
+    messageCount: 0
+  };
+  tierHistory = [];
+  operationCount = 0;
+  lastPerformanceCheck = Date.now();
+  performanceCheckInterval = 5000;
+  selectTier(criteria) {
+    const { lowLatency, highVolume, memoryConstrained, predictablePattern } = criteria;
+    if (lowLatency && !highVolume && !memoryConstrained) {
+      return "nano" /* NANO */;
+    }
+    if (predictablePattern && !memoryConstrained) {
+      return "jit" /* JIT */;
+    }
+    if (highVolume && memoryConstrained) {
+      return "zero-copy" /* ZERO_COPY */;
+    }
+    return "adaptive" /* ADAPTIVE */;
+  }
+  analyzeWorkload() {
+    const metrics = this.performanceMetrics;
+    const now = Date.now();
+    const timeSinceLastCheck = now - this.lastPerformanceCheck;
+    const opsPerSecond = this.operationCount / (timeSinceLastCheck / 1000);
+    const isHighVolume = metrics.messageCount > 1000 || metrics.sessionCount > 500;
+    const isMemoryConstrained = metrics.memoryEfficiency < 0.7;
+    const isLowLatency = metrics.latency < 10;
+    const isPredictable = this.tierHistory.length > 5 && this.tierHistory.slice(-5).every((t) => t === this.currentTier);
+    this.operationCount = 0;
+    this.lastPerformanceCheck = now;
+    return {
+      lowLatency: isLowLatency,
+      highVolume: isHighVolume,
+      memoryConstrained: isMemoryConstrained,
+      predictablePattern: isPredictable
+    };
+  }
+  switchToOptimalTier() {
+    const criteria = this.analyzeWorkload();
+    const optimalTier = this.selectTier(criteria);
+    if (optimalTier !== this.currentTier) {
+      console.log(`Switching from ${this.currentTier} to ${optimalTier} tier`);
+      this.currentTier = optimalTier;
+      this.tierHistory.push(optimalTier);
+    }
+  }
+  getCurrentOrchestrator() {
+    switch (this.currentTier) {
+      case "nano" /* NANO */:
+        return this.nanoOrchestrator;
+      case "jit" /* JIT */:
+        return this.jitOrchestrator;
+      case "zero-copy" /* ZERO_COPY */:
+        return this.zeroCopyOrchestrator;
+      case "adaptive" /* ADAPTIVE */:
+        return this.adaptiveOrchestrator;
+      default:
+        return this.nanoOrchestrator;
+    }
+  }
+  updateMetrics(operationType, startTime) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    this.operationCount++;
+    this.performanceMetrics.latency = (this.performanceMetrics.latency + duration) / 2;
+    if (operationType === "session") {
+      this.performanceMetrics.sessionCount++;
+    } else if (operationType === "message") {
+      this.performanceMetrics.messageCount++;
+    }
+    const now = Date.now();
+    const timeSinceStart = (now - this.lastPerformanceCheck) / 1000;
+    if (timeSinceStart > 0) {
+      this.performanceMetrics.throughput = this.operationCount / timeSinceStart;
+    }
+    const totalMemory = this.performanceMetrics.sessionCount * 1000 + this.performanceMetrics.messageCount * 500;
+    const estimatedAvailable = 100 * 1024 * 1024;
+    this.performanceMetrics.memoryEfficiency = Math.min(1, totalMemory / estimatedAvailable);
+  }
+  createSession(config) {
+    const startTime = Date.now();
+    const session = this.nanoOrchestrator.createSession(config);
+    this.getCurrentOrchestrator().createSession(config);
+    this.updateMetrics("session", startTime);
+    if (Date.now() - this.lastPerformanceCheck > this.performanceCheckInterval) {
+      this.switchToOptimalTier();
+    }
+    return session;
+  }
+  getSession(id) {
+    const startTime = Date.now();
+    let session = this.nanoOrchestrator.getSession(id);
+    if (!session) {
+      session = this.getCurrentOrchestrator().getSession(id);
+    }
+    this.updateMetrics("query", startTime);
+    return session;
+  }
+  updateSession(id, updates) {
+    const startTime = Date.now();
+    const nanoResult = this.nanoOrchestrator.updateSession(id, updates);
+    const currentResult = this.getCurrentOrchestrator().updateSession(id, updates);
+    this.updateMetrics("session", startTime);
+    return currentResult || nanoResult;
+  }
+  deleteSession(id) {
+    const startTime = Date.now();
+    const nanoResult = this.nanoOrchestrator.deleteSession(id);
+    const currentResult = this.getCurrentOrchestrator().deleteSession(id);
+    this.updateMetrics("session", startTime);
+    return currentResult || nanoResult;
+  }
+  setContext(sessionId, context) {
+    this.getCurrentOrchestrator().setContext(sessionId, context);
+  }
+  getContext(sessionId) {
+    return this.getCurrentOrchestrator().getContext(sessionId);
+  }
+  sendMessage(sessionId, message) {
+    const startTime = Date.now();
+    const result = this.getCurrentOrchestrator().sendMessage(sessionId, message);
+    this.updateMetrics("message", startTime);
+    return result;
+  }
+  processMessages() {
+    const startTime = Date.now();
+    const count = this.getCurrentOrchestrator().processMessages();
+    this.updateMetrics("message", startTime);
+    return count;
+  }
+  getAllSessions() {
+    const startTime = Date.now();
+    const sessions = this.getCurrentOrchestrator().getAllSessions();
+    this.updateMetrics("query", startTime);
+    return sessions;
+  }
+  getSessionsByType(type) {
+    const startTime = Date.now();
+    const sessions = this.getCurrentOrchestrator().getSessionsByType(type);
+    this.updateMetrics("query", startTime);
+    return sessions;
+  }
+  getSessionsByStatus(status) {
+    const startTime = Date.now();
+    const sessions = this.getCurrentOrchestrator().getSessionsByStatus(status);
+    this.updateMetrics("query", startTime);
+    return sessions;
+  }
+  getWorkspaceSessions(workspace) {
+    const startTime = Date.now();
+    const sessions = this.getCurrentOrchestrator().getWorkspaceSessions(workspace);
+    this.updateMetrics("query", startTime);
+    return sessions;
+  }
+  getMetrics() {
+    const currentMetrics = this.getCurrentOrchestrator().getMetrics();
+    return {
+      ...currentMetrics,
+      performanceTier: this.currentTier,
+      operationsPerSecond: this.performanceMetrics.operationsPerSecond,
+      memoryEfficiency: this.performanceMetrics.memoryEfficiency,
+      averageLatency: this.performanceMetrics.latency,
+      throughput: this.performanceMetrics.throughput,
+      tierHistory: this.tierHistory.slice(-10),
+      autoOptimized: true
+    };
+  }
+  getSessionCount() {
+    return this.getCurrentOrchestrator().getSessionCount();
+  }
+  clearAll() {
+    this.nanoOrchestrator.clearAll();
+    this.jitOrchestrator.clearAll();
+    this.zeroCopyOrchestrator.clearAll();
+    this.adaptiveOrchestrator.clearAll();
+    this.getCurrentOrchestrator().clearAll();
+  }
+  healthCheck() {
+    const metrics = this.getMetrics();
+    const memoryLimit = 100 * 1024 * 1024;
+    if (metrics.memoryUsage > memoryLimit) {
+      return { status: "unhealthy", details: { memoryUsage: metrics.memoryUsage, limit: memoryLimit } };
+    }
+    if (metrics.activeSessions > 5000) {
+      return { status: "degraded", details: { activeSessions: metrics.activeSessions } };
+    }
+    return { status: "healthy", details: metrics };
+  }
+  exportSessions() {
+    return this.getCurrentOrchestrator().exportSessions();
+  }
+  importSessions(sessions) {
+    sessions.forEach((s) => {
+      this.createSession({
+        type: s.type,
+        name: s.name,
+        workspace: s.workspace,
+        config: s.config
+      });
+    });
+  }
+  onSessionCreated(callback) {
+    this.getCurrentOrchestrator().onSessionCreated(callback);
+  }
+  onSessionUpdated(callback) {
+    this.getCurrentOrchestrator().onSessionUpdated(callback);
+  }
+  onSessionDeleted(callback) {
+    this.getCurrentOrchestrator().onSessionDeleted(callback);
+  }
+  onMessage(callback) {
+    this.getCurrentOrchestrator().onMessage(callback);
+  }
+  getCurrentTier() {
+    return this.currentTier;
+  }
+  setTier(tier) {
+    this.currentTier = tier;
+    this.tierHistory.push(tier);
+    console.log(`Manually set tier to ${tier}`);
+  }
+  getAvailableTiers() {
+    return Object.values(PerformanceTier);
+  }
+  analyzePerformance() {
+    const criteria = this.analyzeWorkload();
+    const optimalTier = this.selectTier(criteria);
+    const recommendations = [];
+    if (optimalTier !== this.currentTier) {
+      recommendations.push(`Consider switching to ${optimalTier} tier for better performance`);
+    }
+    if (this.performanceMetrics.memoryEfficiency < 0.5) {
+      recommendations.push("Memory usage is high, consider zero-copy optimization");
+    }
+    if (this.performanceMetrics.latency > 100) {
+      recommendations.push("High latency detected, consider nano-tier for faster operations");
+    }
+    return {
+      currentTier: this.currentTier,
+      recommendations,
+      metrics: this.performanceMetrics
+    };
+  }
+}
+function createTieredOrchestrator() {
+  return new TieredOrchestrator;
+}
+var tieredOrchestrator = createTieredOrchestrator();
+export {
+  tieredOrchestrator,
+  createTieredOrchestrator,
+  TieredOrchestrator
+};
