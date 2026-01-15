@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import { createMessageBus } from "./core/message-bus.js";
-import { createRegistry } from "./core/registry.js";
-import { Director } from "./core/director.js";
-import { ContextManager } from "./core/context.js";
+import { createUnifiedOrchestrator } from "./core/unified.js";
 import type { SessionType } from "./core/types.js";
 import {
   validateContextKey,
@@ -14,14 +11,8 @@ import {
   createSecureError
 } from "./utils/security.js";
 
-// Global state
-const registry = createRegistry();
-let state = {
-  messageBus: createMessageBus(),
-  registry: registry,
-  director: new Director({ maxConcurrentSessions: 10 }, registry),
-  contextManager: new ContextManager()
-};
+// Global state - unified orchestrator
+let state = createUnifiedOrchestrator();
 
 program
   .name('claude-orchestration')
@@ -30,13 +21,12 @@ program
 
 program
   .command('start')
-  .description('Start the orchestration system')
+  .description('Start the unified orchestration system')
   .action(async () => {
-    console.log('Orchestration system started');
-    console.log('Message Bus:', state.messageBus.constructor.name);
-    console.log('Registry:', state.registry.constructor.name);
-    console.log('Director:', state.director.constructor.name);
-    console.log('Context Manager:', state.contextManager.constructor.name);
+    console.log('Unified orchestration system started');
+    console.log('Orchestrator:', state.constructor.name);
+    const metrics = state.getMetrics();
+    console.log('Metrics:', metrics);
   });
 
 program
@@ -60,7 +50,7 @@ program
           validateWorkspacePath(options.workspace);
           validateSessionType(options.type as SessionType);
 
-          session = await state.director.createSession({
+          session = await state.createSession({
             type: options.type as SessionType,
             name: options.name,
             workspace: options.workspace,
@@ -75,7 +65,7 @@ program
         break;
 
       case 'list':
-        const sessions = state.director.getAllSessions();
+        const sessions = state.getAllSessions();
         console.log('Sessions:', sessions.length);
         sessions.forEach(s => console.log(`- ${s.id}: ${s.name} (${s.type})`));
         break;
@@ -105,7 +95,7 @@ program
           validateContextKey(options.key);
           const value = validateJsonInput(options.value);
 
-          state.contextManager.setContext(options.key, value);
+          state.setContext(options.key, value);
           console.log('Context set:', options.key);
         } catch (error) {
           console.error('Error:', createSecureError(error instanceof Error ? error.message : String(error)).message);
@@ -120,7 +110,7 @@ program
           // Security validation
           validateContextKey(key);
 
-          const context = state.contextManager.getContext(key);
+          const context = state.getContext(key);
           if (context) {
             // Security: Sanitize output to prevent data leakage
             const sanitizedContext = JSON.stringify(sanitizeObject(context), null, 2);
@@ -135,7 +125,7 @@ program
         break;
 
       case 'list':
-        const contexts = state.contextManager.getAllContexts();
+        const contexts = state.getAllContexts();
         console.log('Contexts:', contexts.length);
         contexts.forEach((c, i) => console.log(`${i}: ${JSON.stringify(c).substring(0, 50)}...`));
         break;

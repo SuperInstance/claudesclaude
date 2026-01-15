@@ -1,11 +1,6 @@
-// Core types for the orchestration system
-
-export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment' | 'director' | 'department' | 'observer';
+export type SessionType = 'ai-assistant' | 'development' | 'testing' | 'deployment';
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 export type MessageType = 'system' | 'user' | 'agent' | 'task' | 'command' | 'query' | 'response';
-export type WorkflowStepType = 'initialize' | 'execute' | 'validate' | 'complete';
-export type CheckpointType = 'auto' | 'manual' | 'scheduled';
-export type MessagePriority = 'low' | 'normal' | 'high' | 'critical';
 
 export interface Session {
   id: string;
@@ -25,78 +20,6 @@ export interface Message {
   target?: string;
   data: any;
   timestamp: Date;
-}
-
-
-export interface Checkpoint {
-  id: string;
-  sessionId: string;
-  type: CheckpointType;
-  name: string;
-  data: any;
-  createdAt: Date;
-  expiresAt?: Date;
-}
-
-export interface Task {
-  id: string;
-  name: string;
-  type: string;
-  priority: number;
-  payload: Record<string, any>;
-  timeoutMs: number;
-  retries: number;
-  maxRetries: number;
-}
-
-export interface DepartmentConfig {
-  id: string;
-  name: string;
-  domain: string;
-  maxConcurrentTasks: number;
-  taskTimeoutMs: number;
-  enableAutoScaling: boolean;
-  resourceLimits: {
-    memory: number;
-    cpu: number;
-    disk: number;
-  };
-  capabilities: string[];
-  constraints: string[];
-}
-
-export interface Department {
-  id: string;
-  name: string;
-  type: SessionType;
-  config: DepartmentConfig;
-  sessions: Set<string>;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface OrchestrationError extends Error {
-  code: string;
-  category: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  timestamp: Date;
-  sessionId?: string;
-}
-
-export interface ValidationError extends Error {
-  field: string;
-  value: any;
-  message: string;
-  code: string;
-}
-
-export interface SecurityConfig {
-  enableInputValidation: boolean;
-  enableOutputSanitization: boolean;
-  maxKeyLength: number;
-  maxWorkspacePathLength: number;
-  blockedKeyPatterns: string[];
-  sensitiveDataFields: string[];
 }
 
 export type SessionId = string;
@@ -132,19 +55,3 @@ export class SessionNotFoundError extends Error {
     this.name = 'SessionNotFoundError';
   }
 }
-
-export class MessageTimeoutError extends Error {
-  constructor(messageId: string, timeout: number) {
-    super(`Message timeout: ${messageId} after ${timeout}ms`);
-    this.name = 'MessageTimeoutError';
-  }
-}
-
-export class WorkflowError extends Error {
-  constructor(workflowId: string, message: string) {
-    super(`Workflow error: ${workflowId} - ${message}`);
-    this.name = 'WorkflowError';
-  }
-}
-
-

@@ -1,30 +1,20 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import { createMessageBus } from "./core/message-bus.js";
-import { createRegistry } from "./core/registry.js";
-import { Director } from "./core/director.js";
-import { ContextManager } from "./core/context.js";
+import { createUnifiedOrchestrator } from "./core/unified.js";
 import { validateContextKey, validateJsonInput, validateWorkspacePath, validateSessionType, sanitizeObject, createSecureError } from "./utils/security.js";
-const registry = createRegistry();
-let state = {
-    messageBus: createMessageBus(),
-    registry: registry,
-    director: new Director({ maxConcurrentSessions: 10 }, registry),
-    contextManager: new ContextManager()
-};
+let state = createUnifiedOrchestrator();
 program
     .name('claude-orchestration')
     .description('Claude Orchestration System CLI')
     .version('0.1.0');
 program
     .command('start')
-    .description('Start the orchestration system')
+    .description('Start the unified orchestration system')
     .action(async () => {
-    console.log('Orchestration system started');
-    console.log('Message Bus:', state.messageBus.constructor.name);
-    console.log('Registry:', state.registry.constructor.name);
-    console.log('Director:', state.director.constructor.name);
-    console.log('Context Manager:', state.contextManager.constructor.name);
+    console.log('Unified orchestration system started');
+    console.log('Orchestrator:', state.constructor.name);
+    const metrics = state.getMetrics();
+    console.log('Metrics:', metrics);
 });
 program
     .command('session')
@@ -44,7 +34,7 @@ program
             try {
                 validateWorkspacePath(options.workspace);
                 validateSessionType(options.type);
-                session = await state.director.createSession({
+                session = await state.createSession({
                     type: options.type,
                     name: options.name,
                     workspace: options.workspace,
@@ -58,7 +48,7 @@ program
             console.log('Session created:', session.id);
             break;
         case 'list':
-            const sessions = state.director.getAllSessions();
+            const sessions = state.getAllSessions();
             console.log('Sessions:', sessions.length);
             sessions.forEach(s => console.log(`- ${s.id}: ${s.name} (${s.type})`));
             break;
@@ -83,7 +73,7 @@ program
             try {
                 validateContextKey(options.key);
                 const value = validateJsonInput(options.value);
-                state.contextManager.setContext(options.key, value);
+                state.setContext(options.key, value);
                 console.log('Context set:', options.key);
             }
             catch (error) {
@@ -95,7 +85,7 @@ program
             const key = options.key || '';
             try {
                 validateContextKey(key);
-                const context = state.contextManager.getContext(key);
+                const context = state.getContext(key);
                 if (context) {
                     const sanitizedContext = JSON.stringify(sanitizeObject(context), null, 2);
                     console.log(sanitizedContext);
@@ -110,7 +100,7 @@ program
             }
             break;
         case 'list':
-            const contexts = state.contextManager.getAllContexts();
+            const contexts = state.getAllContexts();
             console.log('Contexts:', contexts.length);
             contexts.forEach((c, i) => console.log(`${i}: ${JSON.stringify(c).substring(0, 50)}...`));
             break;

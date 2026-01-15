@@ -27,16 +27,4 @@ export class SessionNotFoundError extends Error {
         this.name = 'SessionNotFoundError';
     }
 }
-export class MessageTimeoutError extends Error {
-    constructor(messageId, timeout) {
-        super(`Message timeout: ${messageId} after ${timeout}ms`);
-        this.name = 'MessageTimeoutError';
-    }
-}
-export class WorkflowError extends Error {
-    constructor(workflowId, message) {
-        super(`Workflow error: ${workflowId} - ${message}`);
-        this.name = 'WorkflowError';
-    }
-}
 //# sourceMappingURL=types.js.map
