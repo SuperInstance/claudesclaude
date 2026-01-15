@@ -10,7 +10,7 @@ import { JitOrchestrator } from './jit-orchestrator.js';
 import { ZeroCopyOrchestrator } from './zerocopy-orchestrator.js';
 
 // Performance tiers
-enum PerformanceTier {
+export enum PerformanceTier {
   NANO = 'nano',        // Ultra-low latency, minimal overhead
   JIT = 'jit',          // JIT-optimized for common patterns
   ZERO_COPY = 'zero-copy', // Memory-efficient for large datasets
@@ -82,10 +82,8 @@ export class TieredOrchestrator {
   private analyzeWorkload(): TierSelectionCriteria {
     const metrics = this.performanceMetrics;
     const now = Date.now();
-    const timeSinceLastCheck = now - this.lastPerformanceCheck;
 
     // Calculate current performance indicators
-    const opsPerSecond = this.operationCount / (timeSinceLastCheck / 1000);
     const isHighVolume = metrics.messageCount > 1000 || metrics.sessionCount > 500;
     const isMemoryConstrained = metrics.memoryEfficiency < 0.7;
     const isLowLatency = metrics.latency < 10; // ms
@@ -148,18 +146,18 @@ export class TieredOrchestrator {
     }
 
     // Calculate throughput
-    const now = Date.now();
-    const timeSinceStart = (now - this.lastPerformanceCheck) / 1000;
+    const _now = Date.now();
+    const timeSinceStart = (_now - this.lastPerformanceCheck) / 1000;
     if (timeSinceStart > 0) {
       this.performanceMetrics.throughput = this.operationCount / timeSinceStart;
     }
 
     // Memory efficiency calculation (simplified)
-    const totalMemory = this.performanceMetrics.sessionCount * 1000 +
+    const _totalMemory = this.performanceMetrics.sessionCount * 1000 +
                        this.performanceMetrics.messageCount * 500;
     const estimatedAvailable = 100 * 1024 * 1024; // 100MB
     this.performanceMetrics.memoryEfficiency =
-      Math.min(1.0, totalMemory / estimatedAvailable);
+      Math.min(1.0, _totalMemory / estimatedAvailable);
   }
 
   // Tiered session creation

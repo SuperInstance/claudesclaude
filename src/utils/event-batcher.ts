@@ -310,7 +310,7 @@ export class EventBatcher extends EventEmitter {
     }
 
     // Check if memory limit would be exceeded by next event
-    const nextEventSize = this.eventQueue.length > 0
+    const nextEventSize = this.eventQueue.length > 0 && this.eventQueue[0] !== undefined
       ? this.calculateEventSize(this.eventQueue[0])
       : 0;
 
@@ -334,7 +334,7 @@ export class EventBatcher extends EventEmitter {
       const mid = Math.floor((low + high) / 2);
       const midEvent = this.eventQueue[mid];
 
-      if (midEvent.priority! < event.priority!) {
+      if (midEvent !== undefined && (midEvent.priority ?? 0) < (event.priority ?? 0)) {
         high = mid - 1;
       } else {
         low = mid + 1;

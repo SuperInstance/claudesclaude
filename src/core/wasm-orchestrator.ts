@@ -5,24 +5,30 @@
 
 import type { Session, SessionType, Message } from './types.js';
 
+// WebAssembly code for ultra-fast operations (simplified for demonstration)
+const wasmCode = new Uint8Array([
+  0x00, 0x61, 0x73, 0x6d, // Magic number
+  0x01, 0x00, 0x00, 0x00, // Version
+  // Module would continue with actual WASM instructions
+]);
+
 // WebAssembly module for ultra-fast operations
 const wasmModule = typeof WebAssembly !== 'undefined' ? new WebAssembly.Module(wasmCode) : null;
 
 // WebAssembly instance
+const wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 65536 });
 const wasmInstance = wasmModule ? new WebAssembly.Instance(wasmModule, {
   env: {
-    memory: new WebAssembly.Memory({ initial: 17, maximum: 65536 }),
+    memory: wasmMemory,
     table: new WebAssembly.Table({ initial: 1, element: 'anyfunc' })
   }
 }) : null;
 
 // Export WASM functions (with fallbacks)
 const wasmExports = wasmInstance?.exports || {};
-const alloc = wasmExports.alloc as (() => number) | undefined;
 const free = wasmExports.free as ((ptr: number) => void) | undefined;
 const createSessionID = wasmExports.createSessionID as (() => number) | undefined;
 const hashString = wasmExports.hashString as ((str: string) => number) | undefined;
-const fastFilter = wasmExports.fastFilter as ((arr: any[], pred: (item: any) => boolean) => any[]) | undefined;
 
 // WebAssembly orchestrator with extreme performance
 export class WasmOrchestrator {
@@ -30,10 +36,13 @@ export class WasmOrchestrator {
   private contexts = new Map<string, any>();
   private messages: Message[] = [];
   private events = new Map<string, Set<Function>>();
-  private wasmMemory = wasmInstance.exports.memory as WebAssembly.Memory;
-  private nextSessionId = 0;
+  private wasmMemory: { buffer: ArrayBufferLike };
   private totalSessions = 0;
   private totalMessages = 0;
+
+  constructor() {
+    this.wasmMemory = wasmMemory as unknown as { buffer: ArrayBufferLike };
+  }
 
   // Ultra-fast session creation using WASM
   createSession(config: { type: SessionType; name: string; workspace: string; config?: any }): Session {
@@ -173,8 +182,9 @@ export class WasmOrchestrator {
     // For now, use optimized JavaScript - in real implementation would use WASM
     const result: T[] = [];
     for (let i = 0; i < array.length; i++) {
-      if (predicate(array[i])) {
-        result.push(array[i]);
+      const item = array[i];
+      if (item && predicate(item)) {
+        result.push(item);
       }
     }
     return result;
@@ -268,13 +278,6 @@ export class WasmOrchestrator {
     }
   }
 }
-
-// WebAssembly code for ultra-fast operations (simplified for demonstration)
-const wasmCode = new Uint8Array([
-  0x00, 0x61, 0x73, 0x6d, // Magic number
-  0x01, 0x00, 0x00, 0x00, // Version
-  // Module would continue with actual WASM instructions
-]);
 
 // Factory function
 export function createWasmOrchestrator(): WasmOrchestrator {

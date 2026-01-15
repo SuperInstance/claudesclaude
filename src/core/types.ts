@@ -131,17 +131,6 @@ function generateSecureRandom(): string {
   }
 }
 
-export function createMessage(type: string, content: string, metadata?: Record<string, any>): Message {
-  const now = Date.now();
-  return {
-    id: `msg-${now}-${Math.random().toString(36).slice(2, 11)}`,
-    type,
-    content,
-    metadata,
-    timestamp: new Date(now)
-  };
-}
-
 export class SessionNotFoundError extends Error {
   constructor(sessionId: SessionId) {
     super(`Session not found: ${sessionId}`);
@@ -151,7 +140,7 @@ export class SessionNotFoundError extends Error {
 
 // Input validation utilities
 export class ValidationError extends Error {
-  constructor(field: string, value: any, reason: string) {
+  constructor(field: string, _value: any, reason: string) {
     super(`Validation failed for ${field}: ${reason}`);
     this.name = 'ValidationError';
   }

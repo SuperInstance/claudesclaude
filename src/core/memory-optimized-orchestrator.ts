@@ -42,6 +42,7 @@ class SessionStorage {
     const index = this.idToIndex.get(id);
     if (index !== undefined) {
       const session = this.sessions[index];
+      if (!session) return false;
       Object.assign(session, updates);
       session.updatedAt = new Date();
       return true;
@@ -70,7 +71,7 @@ class SessionStorage {
   }
 
   clear(): void {
-    this.sessions.fill(null);
+    this.sessions.fill(null as any);
     this.idToIndex.clear();
     this.nextIndex = 0;
     this.count = 0;
@@ -80,7 +81,7 @@ class SessionStorage {
     // Evict oldest session
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
+      const [oldestId] = entries[0]!;
       this.delete(oldestId);
     }
   }
@@ -108,11 +109,14 @@ class MessageStorage {
   getAll(): Message[] {
     if (this.count === 0) return [];
 
-    const result: Message[] = new Array(this.count);
+    const result: Message[] = [];
     let current = this.head;
 
     for (let i = 0; i < this.count; i++) {
-      result[i] = this.messages[current];
+      const message = this.messages[current];
+      if (message) {
+        result.push(message);
+      }
       current = (current + 1) % MAX_MESSAGES;
     }
 
@@ -120,7 +124,7 @@ class MessageStorage {
   }
 
   clear(): void {
-    this.messages.fill(null);
+    this.messages.fill(null as any);
     this.head = 0;
     this.tail = 0;
     this.count = 0;
@@ -144,7 +148,9 @@ class ContextStorage {
     if (this.contexts.size >= this.maxSize) {
       // LRU eviction
       const firstKey = this.contexts.keys().next().value;
-      this.contexts.delete(firstKey);
+      if (firstKey) {
+        this.contexts.delete(firstKey);
+      }
     }
     this.contexts.set(key, context);
   }
@@ -274,7 +280,10 @@ export class MemoryOptimizedOrchestrator {
   sendMessage(sessionId: string, message: Message): boolean {
     if (!this.sessionStorage.get(sessionId)) return false;
 
-    const messageWithTimestamp = { ...message, timestamp: new Date() };
+    const messageWithTimestamp: Message = {
+      ...message,
+      timestamp: message.timestamp || new Date()
+    };
     this.messageStorage.add(messageWithTimestamp);
     this.emit('message', messageWithTimestamp);
     this.metrics.totalMessages++;
@@ -300,8 +309,9 @@ export class MemoryOptimizedOrchestrator {
 
     // Direct iteration without allocation
     for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].type === type) {
-        result.push(sessions[i]);
+      const session = sessions[i];
+      if (session && session.type === type) {
+        result.push(session);
       }
     }
 
@@ -314,8 +324,9 @@ export class MemoryOptimizedOrchestrator {
 
     // Direct iteration without allocation
     for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].status === status) {
-        result.push(sessions[i]);
+      const session = sessions[i];
+      if (session && session.status === status) {
+        result.push(session);
       }
     }
 
@@ -328,8 +339,9 @@ export class MemoryOptimizedOrchestrator {
 
     // Direct iteration without allocation
     for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].workspace === workspace) {
-        result.push(sessions[i]);
+      const session = sessions[i];
+      if (session && session.workspace === workspace) {
+        result.push(session);
       }
     }
 

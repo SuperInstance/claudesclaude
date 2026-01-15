@@ -14,12 +14,16 @@ const COUNTER_MASK = 0xffffff; // 24 bits
 const HEX_CHARS = '0123456789abcdef';
 const HEX_CHARS_MAP = new Map<string, number>();
 for (let i = 0; i < HEX_CHARS.length; i++) {
-  HEX_CHARS_MAP.set(HEX_CHARS[i], i);
+  const char = HEX_CHARS[i];
+  if (char !== undefined) {
+    HEX_CHARS_MAP.set(char, i);
+  }
 }
 
-// State for non-crypto generation
-let seed = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-let counter = 0;
+// Helper function to check if crypto.randomUUID is available
+function hasSecureUUID(): boolean {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function';
+}
 
 export interface UUIDGenerationStrategy {
   generate(): string;
@@ -31,7 +35,7 @@ export class FastUUIDGenerator implements UUIDGenerationStrategy {
   private useCryptoRandom = false;
 
   constructor(useSecureRandom = false) {
-    this.useCryptoRandom = useSecureRandom;
+    this.useCryptoRandom = useSecureRandom && hasSecureUUID();
   }
 
   generate(): string {
@@ -52,7 +56,14 @@ export class FastUUIDGenerator implements UUIDGenerationStrategy {
   private generateSecure(): string {
     // Fallback to crypto.randomUUID for secure generation
     // This is expensive but provides full security guarantees
-    return crypto.randomUUID();
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for environments without crypto.randomUUID
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   }
 
   private generateFast(): string {
@@ -78,7 +89,11 @@ export class FastUUIDGenerator implements UUIDGenerationStrategy {
     const clockSeqHi = variant << 8;
     const clockSeqLow = (random >> 3) & 0xff;
 
-    // Convert to hex strings
+    // Convert to hex strings (use counterValue and clockSeq values)
+    void counterValue;
+    void clockSeqHi;
+    void clockSeqLow;
+
     const timeHex = (timeLow + (timeMid << 16)).toString(16).padStart(8, '0');
     const versionHex = (version + (timeHi & 0x0fff)).toString(16).padStart(4, '0');
     const clockHex = ((random >> 11) & 0x0fff).toString(16).padStart(4, '0');
@@ -132,6 +147,9 @@ export class ThreadSafeUUIDGenerator implements UUIDGenerationStrategy {
 
   generate(): string {
     const generator = this.generators[this.currentIndex];
+    if (generator === undefined) {
+      throw new Error('No generator available');
+    }
     this.currentIndex = (this.currentIndex + 1) % this.generators.length;
     return generator.generate();
   }

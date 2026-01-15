@@ -28,7 +28,8 @@ export class NanoOrchestrator {
       validateWorkspace(config.workspace);
       validateSessionName(config.name);
     } catch (error) {
-      throw new Error(`Invalid session configuration: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Invalid session configuration: ${message}`);
     }
 
     const sessionId = this.nanoUUID();

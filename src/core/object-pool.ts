@@ -3,6 +3,8 @@
  * Eliminates garbage collection overhead through object reuse
  */
 
+import type { Session, SessionType, Message } from './types.js';
+
 // Pre-allocated object pools
 const sessionPool: Session[] = [];
 const messagePool: Message[] = [];
@@ -38,7 +40,7 @@ for (let i = 0; i < MESSAGE_POOL_SIZE; i++) {
 }
 
 // Session pooling
-export function acquireSession(type: string, name: string, workspace: string): Session {
+export function acquireSession(type: SessionType, name: string, workspace: string): Session {
   const session = sessionPool.pop() || {
     id: '',
     type: 'agent',
@@ -127,7 +129,7 @@ export function getPoolStats() {
 }
 
 // Bulk pooling utilities
-export function bulkAcquireSessions(count: number, type: string, name: string, workspace: string): Session[] {
+export function bulkAcquireSessions(count: number, type: SessionType, name: string, workspace: string): Session[] {
   const sessions: Session[] = [];
   for (let i = 0; i < count; i++) {
     sessions.push(acquireSession(type, name + '-' + i, workspace));

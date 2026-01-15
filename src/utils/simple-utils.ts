@@ -5,11 +5,18 @@
 // UUID generation
 export class SimpleUUID {
   generateFast(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
   }
 
   generateSecure(): string {
-    return crypto.randomUUID();
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for environments without crypto.randomUUID
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   }
 
   generate(secure = false): string {
@@ -25,10 +32,10 @@ export class SimpleTimestamp {
 
   format(timestamp: number, options: { includeTimezone?: boolean; includeMilliseconds?: boolean } = {}): string {
     const date = new Date(timestamp);
-    let result = date.toISOString().split('T')[0];
-
-    const timePart = date.toTimeString().split(' ')[0];
-    result += ' ' + timePart;
+    const isoParts = date.toISOString().split('T');
+    const datePart = isoParts[0] ?? '';
+    const timePart = date.toTimeString().split(' ')[0] ?? '';
+    let result = datePart + ' ' + timePart;
 
     if (options.includeMilliseconds) {
       result += '.' + date.getMilliseconds().toString().padStart(3, '0');

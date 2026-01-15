@@ -165,6 +165,24 @@ export class SimplePool<T> {
   inUseCount(): number {
     return this.inUse.size;
   }
+
+  // Resize pool
+  resize(newMinSize: number, newMaxSize: number): void {
+    if (newMinSize > newMaxSize) {
+      throw new Error('Minimum size cannot exceed maximum size');
+    }
+
+    this.config.minSize = newMinSize;
+    this.config.maxSize = newMaxSize;
+
+    // Trim pool if necessary
+    while (this.pool.length > newMaxSize) {
+      const obj = this.pool.pop();
+      if (obj) {
+        this.config.destroyObject(obj);
+      }
+    }
+  }
 }
 
 // String pool for simple string reuse
@@ -223,13 +241,9 @@ export class SessionPool extends SimplePool<any> {
 
 // Connection pool (simplified TCP)
 export class TCPConnectionPool extends SimplePool<any> {
-  private host: string;
-  private port: number;
-  private connectionConfig: any;
-
   constructor(
-    host: string,
-    port: number,
+    _host: string,
+    _port: number,
     config: Partial<PoolConfig<any>> = {}
   ) {
     const baseConfig: PoolConfig<any> = {
@@ -237,20 +251,17 @@ export class TCPConnectionPool extends SimplePool<any> {
       maxSize: 10,
       minSize: 1,
       createObject: () => ({ connected: false, lastUsed: 0 }),
-      resetObject: (conn) => ({ connected: false, lastUsed: 0 }),
-      destroyObject: (conn) => {},
+      resetObject: (_conn) => ({ connected: false, lastUsed: 0 }),
+      destroyObject: (__conn) => {},
       ...config
     };
 
     super(baseConfig);
-    this.host = host;
-    this.port = port;
-    this.connectionConfig = config;
   }
 
   // Get connection with auto-connect
   async getConnection(): Promise<any> {
-    let conn = this.acquire();
+    const conn = this.acquire();
 
     if (!conn.connected) {
       // Simulate connection

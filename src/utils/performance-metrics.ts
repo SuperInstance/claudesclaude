@@ -206,25 +206,31 @@ export class PerformanceCollector extends EventEmitter {
 
   private aggregateMetrics(metrics: PerformanceMetrics[]): MetricAggregation {
     const durations = metrics.map(m => m.duration).sort((a, b) => a - b);
-    const memoryDeltas = metrics.map(m => m.memory?.delta || 0);
+    const memoryDeltas = metrics.map(m => m.memory?.delta ?? 0);
 
     const totalOperations = metrics.length;
     const totalDuration = durations.reduce((sum, d) => sum + d, 0);
-    const averageDuration = totalDuration / totalOperations;
-    const minDuration = durations[0];
-    const maxDuration = durations[durations.length - 1];
+    const averageDuration = totalOperations > 0 ? totalDuration / totalOperations : 0;
+    const minDuration = durations[0] ?? 0;
+    const maxDuration = durations[durations.length - 1] ?? 0;
 
     // Calculate percentiles
     const p95Duration = this.calculatePercentile(durations, 0.95);
     const p99Duration = this.calculatePercentile(durations, 0.99);
 
-    const timeRange = Math.max(...metrics.map(m => m.timestamp)) - Math.min(...metrics.map(m => m.timestamp));
+    const timestamps = metrics.map(m => m.timestamp);
+    const timeRange = timestamps.length > 0
+      ? Math.max(...timestamps) - Math.min(...timestamps)
+      : 0;
     const throughput = timeRange > 0 ? totalOperations / (timeRange / 1000) : 0;
 
+    const hasValidMemoryDeltas = memoryDeltas.length > 0;
     const memoryStats = {
-      averageMemory: memoryDeltas.reduce((sum, d) => sum + d, 0) / memoryDeltas.length,
-      peakMemory: Math.max(...memoryDeltas),
-      totalMemoryDelta: memoryDeltas.reduce((sum, d) => sum + d, 0)
+      averageMemory: hasValidMemoryDeltas
+        ? memoryDeltas.reduce((sum, d) => sum + d, 0) / memoryDeltas.length
+        : 0,
+      peakMemory: hasValidMemoryDeltas ? Math.max(...memoryDeltas) : 0,
+      totalMemoryDelta: hasValidMemoryDeltas ? memoryDeltas.reduce((sum, d) => sum + d, 0) : 0
     };
 
     return {
@@ -242,7 +248,8 @@ export class PerformanceCollector extends EventEmitter {
 
   private calculatePercentile(sortedValues: number[], percentile: number): number {
     const index = Math.ceil(sortedValues.length * percentile) - 1;
-    return sortedValues[Math.max(0, Math.min(index, sortedValues.length - 1))];
+    const clampedIndex = Math.max(0, Math.min(index, sortedValues.length - 1));
+    return sortedValues[clampedIndex] ?? 0;
   }
 
   private updateAggregation(operation: string, metric: PerformanceMetrics): void {
@@ -256,12 +263,14 @@ export class PerformanceCollector extends EventEmitter {
     // Update aggregation with new metric
     aggregation.totalOperations++;
     aggregation.totalDuration += metric.duration;
-    aggregation.averageDuration = aggregation.totalDuration / aggregation.totalOperations;
+    aggregation.averageDuration = aggregation.totalOperations > 0
+      ? aggregation.totalDuration / aggregation.totalOperations
+      : 0;
 
-    if (metric.duration < aggregation.minDuration) {
+    if (metric.duration < (aggregation.minDuration ?? Infinity)) {
       aggregation.minDuration = metric.duration;
     }
-    if (metric.duration > aggregation.maxDuration) {
+    if (metric.duration > (aggregation.maxDuration ?? 0)) {
       aggregation.maxDuration = metric.duration;
     }
 
@@ -274,8 +283,10 @@ export class PerformanceCollector extends EventEmitter {
         };
       }
       aggregation.memoryStats.averageMemory =
-        (aggregation.memoryStats.averageMemory * (aggregation.totalOperations - 1) + metric.memory.used) / aggregation.totalOperations;
-      if (metric.memory.used > aggregation.memoryStats.peakMemory) {
+        aggregation.totalOperations > 1
+          ? (aggregation.memoryStats.averageMemory * (aggregation.totalOperations - 1) + metric.memory.used) / aggregation.totalOperations
+          : metric.memory.used;
+      if (metric.memory.used > (aggregation.memoryStats.peakMemory ?? 0)) {
         aggregation.memoryStats.peakMemory = metric.memory.used;
       }
       aggregation.memoryStats.totalMemoryDelta += metric.memory.delta;
@@ -283,8 +294,11 @@ export class PerformanceCollector extends EventEmitter {
 
     // Recalculate throughput
     const operationMetrics = this.metrics.filter(m => m.operation === operation);
-    const timeRange = Math.max(...operationMetrics.map(m => m.timestamp)) - Math.min(...operationMetrics.map(m => m.timestamp));
-    aggregation.throughput = timeRange > 0 ? operationMetrics.length / (timeRange / 1000) : 0;
+    if (operationMetrics.length > 0) {
+      const timestamps = operationMetrics.map(m => m.timestamp);
+      const timeRange = Math.max(...timestamps) - Math.min(...timestamps);
+      aggregation.throughput = timeRange > 0 ? operationMetrics.length / (timeRange / 1000) : 0;
+    }
   }
 
   private createNewAggregation(): MetricAggregation {

@@ -46,6 +46,7 @@ class SimdSessionStorage {
     if (index === undefined) return false;
 
     const session = this.sessions[index];
+    if (!session) return false;
 
     // Update indices if needed
     if (updates.type !== undefined && updates.type !== session.type) {
@@ -74,6 +75,7 @@ class SimdSessionStorage {
     if (index === undefined) return false;
 
     const session = this.sessions[index];
+    if (!session) return false;
 
     // Remove from all indices
     this.removeFromIndex(session.type, index);
@@ -184,7 +186,7 @@ class SimdSessionStorage {
     const result: Session[] = [];
     for (let i = 0; i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -199,8 +201,13 @@ class SimdSessionStorage {
     // Simple eviction - in real implementation would use timestamp-based SIMD comparison
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
-      this.delete(oldestId);
+      const firstEntry = entries[0];
+      if (firstEntry) {
+        const [oldestId] = firstEntry;
+        if (oldestId) {
+          this.delete(oldestId);
+        }
+      }
     }
   }
 }
@@ -258,12 +265,10 @@ export class SimdOrchestrator {
 
   // SIMD-optimized session deletion
   deleteSession(id: string): boolean {
+    const session = this.sessionStorage.get(id);
     const success = this.sessionStorage.delete(id);
-    if (success) {
-      const session = this.sessionStorage.get(id);
-      if (session) {
-        this.emit('session:deleted', session);
-      }
+    if (success && session) {
+      this.emit('session:deleted', session);
     }
     return success;
   }

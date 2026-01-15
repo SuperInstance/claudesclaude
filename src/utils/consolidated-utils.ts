@@ -5,8 +5,17 @@
 
 // UUID generation - ultra-fast
 export const uuid = {
-  fast: (): string => Date.now().toString(36) + Math.random().toString(36).substr(2),
-  secure: (): string => crypto.randomUUID(),
+  fast: (): string => Date.now().toString(36) + Math.random().toString(36).substring(2),
+  secure: (): string => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for environments without crypto.randomUUID
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  },
   generate: (secure: boolean = false): string => secure ? uuid.secure() : uuid.fast()
 };
 
@@ -15,9 +24,10 @@ export const time = {
   now: (): number => Date.now(),
   format: (timestamp: number, options: { includeTimezone?: boolean; includeMilliseconds?: boolean } = {}): string => {
     const date = new Date(timestamp);
-    let result = date.toISOString().split('T')[0];
-    const timePart = date.toTimeString().split(' ')[0];
-    result += ' ' + timePart;
+    const isoParts = date.toISOString().split('T');
+    const datePart = isoParts[0] ?? '';
+    const timePart = date.toTimeString().split(' ')[0] ?? '';
+    let result = datePart + ' ' + timePart;
 
     if (options.includeMilliseconds) {
       result += '.' + date.getMilliseconds().toString().padStart(3, '0');

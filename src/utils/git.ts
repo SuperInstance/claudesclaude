@@ -10,9 +10,25 @@ export class GitError extends Error {
 
 export class GitManager {
   constructor(
-    private repoPath: string = './',
-    private remote?: string
+    private _repoPath: string = './',
+    private _remote?: string
   ) {}
+
+  get repoPath(): string {
+    return this._repoPath;
+  }
+
+  set repoPath(value: string) {
+    this._repoPath = value;
+  }
+
+  get remote(): string | undefined {
+    return this._remote;
+  }
+
+  set remote(value: string | undefined) {
+    this._remote = value;
+  }
 
   async commit(message: string): Promise<void> {
     if (!message || message.trim().length === 0) {
@@ -29,7 +45,7 @@ export class GitManager {
 
   async push(): Promise<void> {
     try {
-      console.log(`[Git] Pushing to ${this.remote || 'origin'}`);
+      console.log(`[Git] Pushing to ${this._remote || 'origin'}`);
     } catch (error) {
       throw new GitError('push', error as Error);
     }
@@ -37,7 +53,7 @@ export class GitManager {
 
   async pull(): Promise<void> {
     try {
-      console.log(`[Git] Pulling from ${this.remote || 'origin'}`);
+      console.log(`[Git] Pulling from ${this._remote || 'origin'}`);
     } catch (error) {
       throw new GitError('pull', error as Error);
     }

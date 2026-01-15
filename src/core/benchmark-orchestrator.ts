@@ -163,7 +163,8 @@ export class BenchmarkOrchestrator {
     operation: string
   ): Promise<{ latency: number; memory: number; timestamp: number } | null> {
     const startTime = performance.now();
-    const memoryBefore = performance.memory?.usedJSHeapSize || 0;
+    // Type-safe access to performance.memory (browser-specific API)
+    const memoryBefore = (performance as any).memory?.usedJSHeapSize || 0;
 
     try {
       switch (operation) {
@@ -240,7 +241,8 @@ export class BenchmarkOrchestrator {
       }
 
       const endTime = performance.now();
-      const memoryAfter = performance.memory?.usedJSHeapSize || 0;
+      // Type-safe access to performance.memory (browser-specific API)
+      const memoryAfter = (performance as any).memory?.usedJSHeapSize || 0;
       const latency = endTime - startTime;
       const memory = memoryAfter - memoryBefore;
 
@@ -257,7 +259,7 @@ export class BenchmarkOrchestrator {
   // Select operation based on configured mix
   private selectOperation(): string {
     const mix = this.config.operationMix;
-    const operations = [
+    const operations: string[] = [
       'sessionCreation',
       'sessionRetrieval',
       'sessionUpdate',
@@ -279,13 +281,13 @@ export class BenchmarkOrchestrator {
     let cumulative = 0;
 
     for (let i = 0; i < weights.length; i++) {
-      cumulative += weights[i];
+      cumulative += weights[i]!;
       if (random <= cumulative) {
-        return operations[i];
+        return operations[i]!;
       }
     }
 
-    return operations[operations.length - 1];
+    return operations[operations.length - 1]!;
   }
 
   // Auto-optimize based on benchmarks

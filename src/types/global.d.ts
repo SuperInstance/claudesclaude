@@ -3,12 +3,18 @@
  */
 
 declare global {
-  interface WebAssembly {
-    Module: typeof WebAssembly.Module;
-    Instance: typeof WebAssembly.Instance;
-    Memory: typeof WebAssembly.Memory;
-    Table: typeof WebAssembly.Table;
-  }
+  const WebAssembly: {
+    Module: any;
+    Instance: any;
+    Memory: any;
+    Table: any;
+  };
+
+  const crypto: {
+    getRandomValues?: (array: Uint8Array) => void;
+    randomBytes?: (size: number) => Buffer;
+    randomUUID?: () => string;
+  };
 
   interface Performance {
     memory?: {
@@ -17,8 +23,6 @@ declare global {
       jsHeapSizeLimit: number;
     };
   }
-
-  type Transferable = ArrayBuffer | MessagePort;
 }
 
-export {};
+export type Transferable = ArrayBuffer | MessagePort;

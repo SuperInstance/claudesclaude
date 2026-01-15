@@ -53,6 +53,7 @@ class ZeroCopySessionStorage {
     if (index === undefined) return false;
 
     const session = this.sessions[index];
+    if (!session) return false;
 
     // Update indices with zero-copy operations
     if (updates.type !== undefined && updates.type !== session.type) {
@@ -83,6 +84,7 @@ class ZeroCopySessionStorage {
     if (index === undefined) return false;
 
     const session = this.sessions[index];
+    if (!session) return false;
 
     // Remove from indices with zero-copy operations
     this.removeFromIndex(session.type, index);
@@ -107,7 +109,7 @@ class ZeroCopySessionStorage {
     const result: Session[] = [];
     for (let i = 0; i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -124,7 +126,7 @@ class ZeroCopySessionStorage {
     const result: Session[] = [];
     for (let i = 0; i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -141,7 +143,7 @@ class ZeroCopySessionStorage {
     const result: Session[] = [];
     for (let i = 0; i < indexArray.length; i++) {
       const index = indexArray[i];
-      if (index !== 0) {
+      if (index !== undefined && index !== 0) {
         const session = this.sessions[index];
         if (session) {
           result.push(session);
@@ -153,15 +155,14 @@ class ZeroCopySessionStorage {
 
   // Get all sessions with zero-copy filtering
   getAll(): Session[] {
-    const result: Session[] = new Array(this.count);
-    let actualCount = 0;
+    const result: Session[] = [];
     for (let i = 0; i < this.sessions.length; i++) {
       const session = this.sessions[i];
-      if (session !== null) {
-        result[actualCount++] = session;
+      if (session) {
+        result.push(session);
       }
     }
-    return result.slice(0, actualCount);
+    return result;
   }
 
   // Zero-copy indexing with pre-allocated typed arrays
@@ -232,8 +233,13 @@ class ZeroCopySessionStorage {
   private evictLRU(): void {
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
-      this.delete(oldestId);
+      const firstEntry = entries[0];
+      if (firstEntry) {
+        const [oldestId] = firstEntry;
+        if (oldestId) {
+          this.delete(oldestId);
+        }
+      }
     }
   }
 }
@@ -244,7 +250,7 @@ export class ZeroCopyOrchestrator {
   private contexts = new Map<string, any>();
   private messages: Message[] = [];
   private events = new Map<string, Set<Function>>();
-  private transferableObjects: Transferable[] = [];
+  private transferableObjects: any[] = [];
   private metrics = {
     totalSessions: 0,
     totalMessages: 0,
@@ -294,12 +300,10 @@ export class ZeroCopyOrchestrator {
 
   // Zero-copy session deletion
   deleteSession(id: string): boolean {
+    const session = this.sessionStorage.get(id);
     const success = this.sessionStorage.delete(id);
-    if (success) {
-      const session = this.sessionStorage.get(id);
-      if (session) {
-        this.emit('session:deleted', session);
-      }
+    if (success && session) {
+      this.emit('session:deleted', session);
     }
     return success;
   }
@@ -323,6 +327,8 @@ export class ZeroCopyOrchestrator {
 
     // Zero-copy message object creation
     const messageWithTimestamp: Message = {
+      id: message.id || Date.now().toString(36) + Math.random().toString(36).substr(2),
+      type: message.type || 'message',
       content: message.content || '',
       role: message.role || 'user',
       timestamp: new Date(),
@@ -429,7 +435,7 @@ export class ZeroCopyOrchestrator {
   }
 
   // Get transferable objects for postMessage
-  getTransferableObjects(): Transferable[] {
+  getTransferableObjects(): any[] {
     return this.transferableObjects.slice();
   }
 

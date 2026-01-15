@@ -6,14 +6,12 @@
 import type { Session, SessionType, Message } from './types.js';
 
 // Hot-Path optimized constants
-const HOT_PATH_CACHE_SIZE = 100;
 const SESSION_CACHE_SIZE = 500;
 const CONTEXT_CACHE_SIZE = 250;
 
 // Ultra-fast inline functions
 const fastUUID = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 const fastNow = () => new Date();
-const emptyArray: any[] = [];
 
 // Hot-Path cache with extreme optimization
 class HotPathCache<K, V> {
@@ -86,20 +84,26 @@ class HotPathEvents {
 
   emit<T>(event: string, data: T): void {
     const cached = this.listenerCache.get(event);
-    if (cached) {
+    if (cached && cached.length > 0) {
       // Fast path for cached listeners
       for (let i = 0; i < cached.length; i++) {
-        cached[i](data);
+        const callback = cached[i];
+        if (typeof callback === 'function') {
+          callback(data);
+        }
       }
       return;
     }
 
     const listeners = this.listeners.get(event);
-    if (listeners) {
+    if (listeners && listeners.length > 0) {
       // Cache listeners for next time
       this.listenerCache.set(event, listeners);
       for (let i = 0; i < listeners.length; i++) {
-        listeners[i](data);
+        const callback = listeners[i];
+        if (typeof callback === 'function') {
+          callback(data);
+        }
       }
     }
   }
@@ -128,7 +132,8 @@ export class HotPathOrchestrator {
     totalSessions: 0,
     totalMessages: 0,
     hotPathHits: 0,
-    cacheMisses: 0
+    cacheMisses: 0,
+    memoryUsage: 0
   };
 
   // Ultra-fast session creation - hot-path optimized
@@ -263,8 +268,9 @@ export class HotPathOrchestrator {
 
     // Direct iteration for hot-path
     for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].type === type) {
-        result.push(sessions[i]);
+      const session = sessions[i];
+      if (session && session.type === type) {
+        result.push(session);
       }
     }
 
@@ -277,8 +283,9 @@ export class HotPathOrchestrator {
 
     // Direct iteration for hot-path
     for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].status === status) {
-        result.push(sessions[i]);
+      const session = sessions[i];
+      if (session && session.status === status) {
+        result.push(session);
       }
     }
 
@@ -291,8 +298,9 @@ export class HotPathOrchestrator {
 
     // Direct iteration for hot-path
     for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].workspace === workspace) {
-        result.push(sessions[i]);
+      const session = sessions[i];
+      if (session && session.workspace === workspace) {
+        result.push(session);
       }
     }
 

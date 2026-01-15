@@ -47,6 +47,7 @@ class JitSessionStorage {
     if (index === undefined) return false;
 
     const session = this.sessions[index];
+    if (!session) return false;
 
     // Update indices with branch prediction hints
     if (updates.type !== undefined && updates.type !== session.type) {
@@ -77,6 +78,7 @@ class JitSessionStorage {
     if (index === undefined) return false;
 
     const session = this.sessions[index];
+    if (!session) return false;
 
     // Remove from all indices
     this.removeFromIndex(session.type, index);
@@ -97,52 +99,64 @@ class JitSessionStorage {
     if (!indices) return [];
 
     // JIT-optimized array construction
-    const result: Session[] = new Array(indices.length);
+    const result: Session[] = [];
+    let actualCount = 0;
     for (let i = 0; i < indices.length; i++) {
-      const session = this.sessions[indices[i]];
-      if (session) {
-        result[i] = session;
+      const index = indices[i];
+      if (index !== undefined && index !== -1) {
+        const session = this.sessions[index];
+        if (session) {
+          result[actualCount++] = session;
+        }
       }
     }
-    return result;
+    return result.slice(0, actualCount);
   }
 
   getByStatus(status: string): Session[] {
     const indices = this.statusIndices.get(status);
     if (!indices) return [];
 
-    const result: Session[] = new Array(indices.length);
+    const result: Session[] = [];
+    let actualCount = 0;
     for (let i = 0; i < indices.length; i++) {
-      const session = this.sessions[indices[i]];
-      if (session) {
-        result[i] = session;
+      const index = indices[i];
+      if (index !== undefined && index !== -1) {
+        const session = this.sessions[index];
+        if (session) {
+          result[actualCount++] = session;
+        }
       }
     }
-    return result;
+    return result.slice(0, actualCount);
   }
 
   getByWorkspace(workspace: string): Session[] {
     const indices = this.workspaceIndices.get(workspace);
     if (!indices) return [];
 
-    const result: Session[] = new Array(indices.length);
+    const result: Session[] = [];
+    let actualCount = 0;
     for (let i = 0; i < indices.length; i++) {
-      const session = this.sessions[indices[i]];
-      if (session) {
-        result[i] = session;
+      const index = indices[i];
+      if (index !== undefined && index !== -1) {
+        const session = this.sessions[index];
+        if (session) {
+          result[actualCount++] = session;
+        }
       }
     }
-    return result;
+    return result.slice(0, actualCount);
   }
 
   // Get all sessions
   getAll(): Session[] {
     // JIT-optimized filtering
-    const result: Session[] = new Array(this.count);
+    const result: Session[] = [];
     let actualCount = 0;
-    for (let i = 0; i < this.count; i++) {
+    for (let i = 0; i < this.sessions.length; i++) {
       const session = this.sessions[i];
-      if (session !== null) {
+      if (session) {
         result[actualCount++] = session;
       }
     }
@@ -212,8 +226,13 @@ class JitSessionStorage {
     // Simple eviction - in real implementation would use timestamp-based JIT comparison
     const entries = Array.from(this.idToIndex.entries());
     if (entries.length > 0) {
-      const [oldestId] = entries[0];
-      this.delete(oldestId);
+      const firstEntry = entries[0];
+      if (firstEntry) {
+        const [oldestId] = firstEntry;
+        if (oldestId) {
+          this.delete(oldestId);
+        }
+      }
     }
   }
 }
@@ -300,6 +319,8 @@ export class JitOrchestrator {
 
     // JIT-optimized object creation with shape stabilization
     const messageWithTimestamp: Message = {
+      id: message.id || this.generateJitUUID(),
+      type: message.type || 'user',
       content: message.content || '',
       role: message.role || 'user',
       timestamp: new Date(),
