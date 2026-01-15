@@ -39,15 +39,22 @@ node dist/cli.js session list
 
 ### Manage Context
 ```bash
-# Set context
-node dist/cli.js context set -k "key" -v '{"value": "data"}'
+# Set context with security validation
+node dist/cli.js context set -k "valid_key" -v '{"value": "data"}'
 
-# Get context
-node dist/cli.js context get -k "key"
+# Get context with output sanitization
+node dist/cli.js context get -k "valid_key"
 
 # List all context
 node dist/cli.js context list
 ```
+
+### Security Features
+- **Input Validation**: All user inputs are validated and sanitized
+- **Path Traversal Protection**: Workspace paths are secured against attacks
+- **JSON Safety**: Protected against prototype pollution and injection attacks
+- **Output Sanitization**: Sensitive data is automatically redacted from output
+- **Error Security**: Error messages don't leak sensitive information
 
 ## 🏗️ Architecture
 
@@ -86,6 +93,7 @@ interface Session {
 | Dependencies | Minimal (commander only) |
 | Build Time | < 1 second |
 | Test Coverage | Core functionality verified |
+| Security | Hardened against common vulnerabilities |
 
 ## 🔧 Development
 
@@ -138,9 +146,10 @@ MIT License - see LICENSE file for details.
 ## 🔍 Optimization Notes
 
 This project has been optimized for:
+- **Security**: Hardened against common web vulnerabilities and attacks
 - **Size**: Removed unnecessary dependencies and unused code
 - **Performance**: Streamlined architecture with minimal overhead
 - **Maintainability**: Simple, focused codebase
 - **Build Speed**: Fast TypeScript compilation
 
-The system now provides a solid foundation for multi-agent orchestration without unnecessary complexity.
+The system provides a secure, high-performance foundation for multi-agent orchestration with comprehensive security measures.
