@@ -6,11 +6,16 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "start": "node dist/cli.js",
-    "dev": "node --watch src/cli.ts",
-    "build": "npx tsc",
+    "start": "bun run src/cli.ts",
+    "dev": "bun --watch src/cli.ts",
+    "build": "bun build src/index.ts --outdir dist --target=node",
+    "build:all": "bun build src/**/*.ts --outdir dist --target=node",
     "test": "bun test",
-    "type-check": "npx tsc --noEmit",
+    "test:performance": "bun test-scripts/test-performance-validation.js",
+    "test:validation": "bun test-scripts/test-simple-validation.js",
+    "type-check": "bun x tsc --noEmit",
+    "lint": "bun x eslint src/**/*.ts",
+    "format": "bun x prettier --write src/**/*.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

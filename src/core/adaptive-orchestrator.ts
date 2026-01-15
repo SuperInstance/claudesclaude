@@ -40,7 +40,7 @@ const PERFORMANCE_STRATEGIES: PerformanceStrategy[] = [
 ];
 
 // Adaptive cache with dynamic sizing
-class AdaptiveCache<K, V> {
+class AdaptiveCache<K extends string, V> {
   private cache = new Map<K, V>();
   private accessTimes = new Map<K, number>();
   private maxSize: number;
@@ -88,7 +88,7 @@ class AdaptiveCache<K, V> {
   }
 
   private evictLRU(): void {
-    let oldestKey = '';
+    let oldestKey: K | null = null;
     let oldestTime = Infinity;
 
     for (const [key, time] of this.accessTimes) {
@@ -253,11 +253,11 @@ class PerformanceMonitor {
     const currentLoad = this.metrics.activeSessions;
 
     if (score < 0.5 || currentLoad > 1000) {
-      return PERFORMANCE_STRATEGIES[0]; // minimal
+      return PERFORMANCE_STRATEGIES[0]!; // minimal
     } else if (score < 0.8 || currentLoad > 500) {
-      return PERFORMANCE_STRATEGIES[1]; // balanced
+      return PERFORMANCE_STRATEGIES[1]!; // balanced
     } else {
-      return PERFORMANCE_STRATEGIES[2]; // aggressive
+      return PERFORMANCE_STRATEGIES[2]!; // aggressive
     }
   }
 
@@ -281,8 +281,8 @@ class PerformanceMonitor {
 
 // Adaptive orchestrator
 export class AdaptiveOrchestrator {
-  private sessionCache: AdaptiveCache<string, Session>;
-  private contextCache: AdaptiveCache<string, any>;
+  private sessionCache!: AdaptiveCache<string, Session>;
+  private contextCache!: AdaptiveCache<string, any>;
   private messageList: Message[] = [];
   private events = new AdaptiveEvents();
   private monitor = new PerformanceMonitor();
@@ -290,7 +290,7 @@ export class AdaptiveOrchestrator {
   private strategyTransitionTime = 0;
 
   constructor() {
-    this.currentStrategy = PERFORMANCE_STRATEGIES[1]; // Start with balanced
+    this.currentStrategy = PERFORMANCE_STRATEGIES[1]!; // Start with balanced
     this.updateCaches();
   }
 
@@ -472,7 +472,7 @@ export class AdaptiveOrchestrator {
     this.contextCache.clear();
     this.messageList = [];
     this.monitor = new PerformanceMonitor();
-    this.switchStrategy(PERFORMANCE_STRATEGIES[1]);
+    this.switchStrategy(PERFORMANCE_STRATEGIES[1]!);
     this.events.emit('sessions:cleared', undefined);
   }
 

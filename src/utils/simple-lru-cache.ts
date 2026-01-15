@@ -1,13 +1,24 @@
 /**
- * Simplified LRU Cache - Basic LRU functionality
+ * Simplified LRU Cache - Basic LRU functionality with optional TTL
  */
 
-export class SimpleLRUCache<K, V> {
-  private cache = new Map<K, V>();
-  private maxSize: number;
+export interface LRUCacheOptions {
+  maxSize: number;
+  ttl?: number;
+}
 
-  constructor(maxSize: number) {
-    this.maxSize = maxSize;
+export class SimpleLRUCache<K, V> {
+  private cache = new Map<K, { value: V; timestamp: number }>();
+  private maxSize: number;
+  private ttl?: number;
+
+  constructor(options: LRUCacheOptions | number) {
+    if (typeof options === 'number') {
+      this.maxSize = options;
+    } else {
+      this.maxSize = options.maxSize;
+      this.ttl = options.ttl;
+    }
   }
 
   set(key: K, value: V): void {
@@ -17,17 +28,29 @@ export class SimpleLRUCache<K, V> {
         break;
       }
     }
-    this.cache.set(key, value);
+    this.cache.set(key, {
+      value,
+      timestamp: Date.now()
+    });
   }
 
   get(key: K): V | undefined {
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      // Move to end (LRU)
+    const item = this.cache.get(key);
+    if (!item) return undefined;
+
+    if (this.ttl && Date.now() - item.timestamp > this.ttl) {
       this.cache.delete(key);
-      this.cache.set(key, value);
+      return undefined;
     }
-    return value;
+
+    // Move to end (LRU)
+    this.cache.delete(key);
+    this.cache.set(key, {
+      ...item,
+      timestamp: Date.now()
+    });
+
+    return item.value;
   }
 
   delete(key: K): boolean {
@@ -39,7 +62,7 @@ export class SimpleLRUCache<K, V> {
   }
 
   values(): V[] {
-    return Array.from(this.cache.values());
+    return Array.from(this.cache.values()).map(item => item.value);
   }
 
   size(): number {

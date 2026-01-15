@@ -125,8 +125,8 @@ export class BenchmarkOrchestrator {
     const opsPerSecond = this.config.measurementRuns / totalTime;
     const avgLatency = measurements.latencies.reduce((a, b) => a + b, 0) / measurements.latencies.length;
     const sortedLatencies = [...measurements.latencies].sort((a, b) => a - b);
-    const p95Latency = sortedLatencies[Math.floor(sortedLatencies.length * 0.95)];
-    const p99Latency = sortedLatencies[Math.floor(sortedLatencies.length * 0.99)];
+    const p95Latency = sortedLatencies[Math.floor(sortedLatencies.length * 0.95)] || avgLatency;
+    const p99Latency = sortedLatencies[Math.floor(sortedLatencies.length * 0.99)] || avgLatency;
     const avgMemory = measurements.memorySamples.reduce((a, b) => a + b, 0) / measurements.memorySamples.length;
     const memoryEfficiency = Math.min(1.0, avgMemory / this.config.memoryBudget);
 
@@ -225,7 +225,7 @@ export class BenchmarkOrchestrator {
           break;
 
         case 'queries':
-          const querySession = orchestrator.createSession({
+          orchestrator.createSession({
             type: 'agent' as SessionType,
             name: 'benchmark',
             workspace: '/workspace/benchmark'

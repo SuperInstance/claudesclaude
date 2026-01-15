@@ -6,18 +6,23 @@
 import type { Session, SessionType, Message } from './types.js';
 
 // WebAssembly module for ultra-fast operations
-const wasmModule = new WebAssembly.Module(wasmCode);
+const wasmModule = typeof WebAssembly !== 'undefined' ? new WebAssembly.Module(wasmCode) : null;
 
 // WebAssembly instance
-const wasmInstance = new WebAssembly.Instance(wasmModule, {
+const wasmInstance = wasmModule ? new WebAssembly.Instance(wasmModule, {
   env: {
     memory: new WebAssembly.Memory({ initial: 17, maximum: 65536 }),
     table: new WebAssembly.Table({ initial: 1, element: 'anyfunc' })
   }
-});
+}) : null;
 
-// Export WASM functions
-const { alloc, free, createSessionID, hashString, fastFilter } = wasmInstance.exports;
+// Export WASM functions (with fallbacks)
+const wasmExports = wasmInstance?.exports || {};
+const alloc = wasmExports.alloc as (() => number) | undefined;
+const free = wasmExports.free as ((ptr: number) => void) | undefined;
+const createSessionID = wasmExports.createSessionID as (() => number) | undefined;
+const hashString = wasmExports.hashString as ((str: string) => number) | undefined;
+const fastFilter = wasmExports.fastFilter as ((arr: any[], pred: (item: any) => boolean) => any[]) | undefined;
 
 // WebAssembly orchestrator with extreme performance
 export class WasmOrchestrator {
@@ -32,10 +37,19 @@ export class WasmOrchestrator {
 
   // Ultra-fast session creation using WASM
   createSession(config: { type: SessionType; name: string; workspace: string; config?: any }): Session {
-    // Use WASM for fast UUID generation
-    const wasmPtr = createSessionID();
-    const sessionId = this.readStringFromMemory(wasmPtr);
-    free(wasmPtr);
+    // Use WASM for fast UUID generation with fallback
+    let sessionId: string;
+    if (createSessionID && free) {
+      try {
+        const wasmPtr = createSessionID();
+        sessionId = this.readStringFromMemory(wasmPtr);
+        free(wasmPtr);
+      } catch {
+        sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      }
+    } else {
+      sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
 
     const timestamp = Date.now();
 
@@ -61,8 +75,14 @@ export class WasmOrchestrator {
 
   // Ultra-fast session retrieval using WASM
   getSession(id: string): Session | undefined {
-    // Use WASM for fast string hashing
-    const hash = hashString(id);
+    // Use WASM for fast string hashing with fallback
+    if (hashString) {
+      try {
+        hashString(id);
+      } catch {
+        // Ignore errors, fall through to direct Map access
+      }
+    }
     return this.sessions.get(id);
   }
 

@@ -4,6 +4,7 @@
  */
 
 import type { Session, SessionType, Message } from './types.js';
+import { validateWorkspace, validateSessionName } from './types.js';
 
 // Nano-orchestrator - extreme minimalism
 export class NanoOrchestrator {
@@ -20,8 +21,16 @@ export class NanoOrchestrator {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
   }
 
-  // Create session - maximum speed
+  // Create session - maximum speed with validation
   createSession(config: { type: SessionType; name: string; workspace: string; config?: any }): Session {
+    // Validate inputs for security
+    try {
+      validateWorkspace(config.workspace);
+      validateSessionName(config.name);
+    } catch (error) {
+      throw new Error(`Invalid session configuration: ${error.message}`);
+    }
+
     const sessionId = this.nanoUUID();
     const now = Date.now();
 
