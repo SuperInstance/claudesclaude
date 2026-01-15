@@ -18,6 +18,6 @@
     "noFallthroughCasesInSwitch": true,
     "downlevelIteration": true
   },
-  "include": ["src", "sdk/typescript/src"],
+  "include": ["src"],
   "exclude": ["node_modules", "dist", "tests"]
 }

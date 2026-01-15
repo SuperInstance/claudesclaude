@@ -1,27 +1,36 @@
 /**
  * Claude Orchestration System - Main Entry Point
- * Unified multi-agent orchestration with minimal moving parts
+ * Ultra-streamlined multi-agent orchestration with maximum efficiency
  */
 
-// Core orchestrator
-export { UnifiedOrchestratorSimple as UnifiedOrchestrator, createUnifiedOrchestratorSimple as createUnifiedOrchestrator } from './core/unified-simple.js';
-export { createGitManager, GitManager } from './utils/git.js';
+// Primary orchestrator - Ultra-streamlined version (highest performance)
+export { UltraStreamlinedOrchestrator as UnifiedOrchestrator, createUltraStreamlinedOrchestrator, ultraOrchestrator } from './core/ultra-streamlined-orchestrator.js';
 
-// Mechanical operations package
-export * from './mechanical-operations.js';
+// Streamlined version (maintains backwards compatibility)
+export { StreamlinedOrchestrator as StreamlinedOrchestrator, createStreamlinedOrchestrator, orchestrator } from './core/streamlined-orchestrator.js';
 
 // Core types
 export type {
   Session,
+  SessionType,
   Message,
   MessageType,
-  SessionType,
   SessionStatus
 } from './core/types.js';
 
-// Optimized orchestrator with mechanical operations
+// Simplified utilities
 export {
-  MechanicalOrchestrator,
-  createMechanicalOrchestrator,
-  DEFAULT_MECHANICAL_CONFIG
-} from './core/mechanical-orchestrator.js';
+  SimpleUUID,
+  SimpleTimestamp,
+  uuidGenerator,
+  timestampOps,
+  generateUUID,
+  generateFastUUID,
+  generateSecureUUID,
+  now,
+  formatTime,
+  timeDiff,
+  createTimeRange
+} from './utils/simple-utils.js';
+
+export { SimpleLRUCache } from './utils/simple-lru-cache.js';
