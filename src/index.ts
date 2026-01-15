@@ -69,6 +69,17 @@ export type {
   SessionStatus
 } from './core/types.js';
 
+// Base orchestrator interface
+export type {
+  BaseOrchestrator,
+  SessionConfig,
+  OrchestratorMetrics,
+  HealthCheckResult,
+  SessionExport
+} from './core/base-orchestrator.js';
+
+export { AbstractOrchestrator } from './core/base-orchestrator.js';
+
 // Simplified utilities
 export {
   SimpleUUID,
