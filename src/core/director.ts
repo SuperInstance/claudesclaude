@@ -1,15 +1,11 @@
 import { OrchestrationSystem } from './registry.js';
 import type { Session } from './types.js';
 
-export interface DirectorConfig {
-  maxConcurrentSessions: number;
-}
-
 export class Director {
-  private config: DirectorConfig;
+  private config: { maxConcurrentSessions: number };
   private orchestration: OrchestrationSystem;
 
-  constructor(config: DirectorConfig, orchestration?: OrchestrationSystem) {
+  constructor(config: { maxConcurrentSessions: number }, orchestration?: OrchestrationSystem) {
     this.config = config;
     this.orchestration = orchestration || new OrchestrationSystem();
   }

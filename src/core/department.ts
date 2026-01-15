@@ -1,11 +1,11 @@
 import { OrchestrationSystem } from './registry.js';
-import type { DepartmentConfig, Session } from './types.js';
+import type { Session } from './types.js';
 
 export class Department {
-  private config: DepartmentConfig;
+  private config: any;
   private orchestration: OrchestrationSystem;
 
-  constructor(config: DepartmentConfig) {
+  constructor(config: any) {
     this.config = config;
     this.orchestration = new OrchestrationSystem();
   }

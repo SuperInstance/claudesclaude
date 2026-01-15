@@ -1,8 +1,8 @@
-import type { DepartmentConfig, Session } from './types.js';
+import type { Session } from './types.js';
 export declare class Department {
     private config;
     private orchestration;
-    constructor(config: DepartmentConfig);
+    constructor(config: any);
     createSession(config: {
         type: any;
         name: string;
